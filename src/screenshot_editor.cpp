@@ -8,6 +8,7 @@
 #include <assert.h>
 #include "cursor.h"
 #include "cfgmgr.h"
+#include <ShlObj.h>
 
 //
 // CEditorToolbar
@@ -457,7 +458,7 @@ LRESULT CEditorActionsStrip::v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPAR
         {
             NMHDR *pnmh = (NMHDR *)lParam;
             bool fHandled = false;
-            LRESULT lr = _OnNotify(pnmh, wParam, &fHandled);
+            LRESULT lr = _OnNotify(pnmh, wParam, lParam, &fHandled);
             if (fHandled)
                 return lr;
         }
@@ -498,6 +499,7 @@ LRESULT CEditorActionsStrip::_OnCreate(CREATESTRUCT *pcs)
     SendMessage(_hwndActions, TB_SETEXTENDEDSTYLE, 0, TBSTYLE_EX_DOUBLEBUFFER | TBSTYLE_EX_DRAWDDARROWS);
 
     _LoadIcons();
+    _EnumOpenWithHandlers();
 
     TBBUTTON rgtbButTools[4] = { 0 };
     {
@@ -532,13 +534,22 @@ LRESULT CEditorActionsStrip::_OnCreate(CREATESTRUCT *pcs)
             SendMessage(_hwndActions, TB_ADDBITMAP, 1, (LPARAM)&ab2);
         }
 
+        const int iIconExtEditFirst = iIconIdx++;
+        if (_vExternEditors.GetSize() >= 1)
+        {
+            TBADDBITMAP ab2;
+            ab2.hInst = nullptr;
+            ab2.nID = (UINT_PTR)_vExternEditors[0].hbmIcon;
+            SendMessage(_hwndActions, TB_ADDBITMAP, 1, (LPARAM)&ab2);
+        }
+
         int i = 0;
 
         rgtbButTools[i].idCommand = IDM_OPENINEXTERNALEDITOR;
         rgtbButTools[i].iString = (INT_PTR)TEXT("Open in...");
         rgtbButTools[i].fsState = TBSTATE_ENABLED;
         rgtbButTools[i].fsStyle = BTNS_BUTTON | BTNS_AUTOSIZE | BTNS_DROPDOWN;
-        rgtbButTools[i].iBitmap = STD_FILENEW; // Temporary icon.
+        rgtbButTools[i].iBitmap = (_vExternEditors.GetSize() >= 1) ? iIconExtEditFirst : STD_FILENEW;
 
         i++;
         rgtbButTools[i].idCommand = IDM_COPY;
@@ -575,6 +586,11 @@ LRESULT CEditorActionsStrip::_OnDestroy()
         DeleteObject(_hbmIconCopy);
     if (_hbmIconSave)
         DeleteObject(_hbmIconSave);
+
+    FOR_EACH_DYNARR(ExternalEditorDef &eed, _vExternEditors)
+    {
+        DeleteObject(eed.hbmIcon);
+    }
 
     return DefWindowProc(_hwnd, WM_DESTROY, 0, 0);
 }
@@ -613,7 +629,7 @@ LRESULT CEditorActionsStrip::_OnCommand(WPARAM wParam, LPARAM lParam)
     return 0;
 }
 
-LRESULT CEditorActionsStrip::_OnNotify(NMHDR *pnmh, WPARAM wParam, bool *pfHandled)
+LRESULT CEditorActionsStrip::_OnNotify(NMHDR *pnmh, WPARAM wParam, LPARAM lParam, bool *pfHandled)
 {
     if (pnmh->code == NM_CUSTOMDRAW && pnmh->hwndFrom == _hwndActions)
     {
@@ -630,6 +646,35 @@ LRESULT CEditorActionsStrip::_OnNotify(NMHDR *pnmh, WPARAM wParam, bool *pfHandl
                 return CDRF_DODEFAULT;
             }
         }
+    }
+    else if (pnmh->code == TBN_DROPDOWN)
+    {
+        NMTOOLBAR *pnmtb = (NMTOOLBAR *)lParam;
+
+        RECT rcItem;
+        SendMessage(_hwndActions, TB_GETRECT, pnmtb->iItem, (LPARAM)&rcItem);
+        MapWindowPoints(_hwndActions, HWND_DESKTOP, (POINT *)&rcItem, 2);
+
+        HMENU hMenu = CreatePopupMenu();
+        int idxMenuItem = 0;
+
+        FOR_EACH_DYNARR(ExternalEditorDef &eed, _vExternEditors)
+        {
+            MENUITEMINFO mii = { sizeof(mii) };
+            mii.fMask = MIIM_ID | MIIM_STRING | MIIM_BITMAP;
+            mii.wID = 0; // <- TODO: Change.
+            mii.dwTypeData = (TCHAR *)eed.szName;
+            mii.cch = _tcslen(eed.szName);
+            mii.hbmpItem = eed.hbmIcon;
+            InsertMenuItem(hMenu, idxMenuItem++, FALSE, &mii);
+        }
+
+        TrackPopupMenu(hMenu, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_VERTICAL, rcItem.left, rcItem.bottom, 0, _hwnd, nullptr);
+
+        DestroyMenu(hMenu);
+
+        *pfHandled = true;
+        return 0;
     }
 
     return 0;
@@ -673,6 +718,77 @@ HRESULT CEditorActionsStrip::_LoadIcons()
     }
 
     return S_OK;
+}
+
+HRESULT CEditorActionsStrip::_EnumOpenWithHandlers()
+{
+    typedef HRESULT (WINAPI *SHAssocEnumHandlers_t)(
+        PCWSTR pszExtra,
+        ASSOC_FILTER afFilter,
+        IEnumAssocHandlers **ppEnumHandler
+    );
+
+    typedef int (WINAPI *Shell_GetCachedImageIndex_t)(
+        PCWSTR pwszIconPath,
+        int iIconIndex,
+        UINT uIconFlags
+    );
+
+    HRESULT hr = E_FAIL;
+
+    HMODULE hmShell32 = LoadLibrary(TEXT("shell32.dll"));
+    if (hmShell32)
+    {
+        SHAssocEnumHandlers_t pfnSHAssocEnumHandlers
+            = (SHAssocEnumHandlers_t)GetProcAddress(hmShell32, "SHAssocEnumHandlers");
+        if (pfnSHAssocEnumHandlers)
+        {
+            IEnumAssocHandlers *pEnum = nullptr;
+            if (SUCCEEDED(pfnSHAssocEnumHandlers(TEXT(".png"), ASSOC_FILTER_RECOMMENDED, &pEnum)))
+            {
+                IAssocHandler *pAssoc = nullptr;
+                ULONG uceltFetched = 0;
+                while (SUCCEEDED(pEnum->Next(1, &pAssoc, &uceltFetched)) && pAssoc)
+                {
+                    ExternalEditorDef eed = { 0 };
+
+                    TCHAR *pszPath = nullptr;
+                    if (SUCCEEDED(pAssoc->GetName(&pszPath))) // GetName returns the path for non-UWP applications
+                    {
+                        _tcscpy_s(eed.szProgramPath, pszPath);
+                        CoTaskMemFree(pszPath);
+                    }
+                    
+                    TCHAR *pszName = nullptr;
+                    if (SUCCEEDED(pAssoc->GetUIName(&pszName)))
+                    {
+                        _tcscpy_s(eed.szName, pszName);
+                        CoTaskMemFree(pszName);
+                    }
+
+                    TCHAR *pszIconPath = nullptr;
+                    int iIconIdx = 0; // This is used for shell image lists, which we are not using here.
+                    if (SUCCEEDED(pAssoc->GetIconLocation(&pszIconPath, &iIconIdx)))
+                    {
+                        HICON hicon;
+                        ExtractIconEx(pszIconPath, 0, nullptr, &hicon, 1);
+                        eed.hbmIcon = HICONToHBITMAP(hicon);
+                        DestroyIcon(hicon);
+
+                        CoTaskMemFree(pszIconPath);
+                    }
+
+                    _vExternEditors.Push(eed);
+                    pAssoc->Release();
+                }
+
+                hr = S_OK;
+            }
+            pEnum->Release();
+        }
+    }
+
+    return hr;
 }
 
 // static

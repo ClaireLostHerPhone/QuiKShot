@@ -90,8 +90,16 @@ class CEditorActionsStrip : public CWindow<CEditorActionsStrip>
     DEFINE_WINDOW_CLASS("screenkirk_EditorActionsStrip");
 
 private:
+    struct ExternalEditorDef
+    {
+        TCHAR szName[MAX_PATH];
+        TCHAR szProgramPath[MAX_PATH];
+        HBITMAP hbmIcon;
+    };
+
     class CScreenshotEditorWindow *_pEditor;
     HWND _hwndActions;
+    CDynamicArray<ExternalEditorDef> _vExternEditors;
     HBITMAP _hbmIconDiscard;
     HBITMAP _hbmIconSave;
     HBITMAP _hbmIconCopy;
@@ -103,9 +111,10 @@ protected:
     LRESULT _OnCreate(CREATESTRUCT *pcs);
     LRESULT _OnDestroy();
     LRESULT _OnCommand(WPARAM wParam, LPARAM lParam);
-    LRESULT _OnNotify(NMHDR *pnmh, WPARAM wParam, bool *pfHandled);
+    LRESULT _OnNotify(NMHDR *pnmh, WPARAM wParam, LPARAM lParam, bool *pfHandled);
 
     HRESULT _LoadIcons();
+    HRESULT _EnumOpenWithHandlers();
 
 public:
     enum Command
