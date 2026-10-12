@@ -3006,17 +3006,54 @@ HRESULT CScreenshotEditorWindow::_EnsureToolbar()
 
 void CScreenshotEditorWindow::_ShowFloatingToolbar()
 {
-    POINT ptShow;
-    ptShow.x = (_rcSelection.right + _pScreenshotCtx->_ptVirtualScreen.x) + 10; // Maybe ask the renderer instead?
-    ptShow.y = (_rcSelection.top + _pScreenshotCtx->_ptVirtualScreen.y);
-
     if (SUCCEEDED(_EnsureToolbar()))
     {
-        // If we don't have a toolbar yet, then we will create one:
+        // If we don't have a floating toolbar instance yet, then we will create one:
         if (!_pFloatingToolbar)
         {
             _pFloatingToolbar = CEditorFloatingToolbar::Create(_pToolbar);
             _pToolbar->OnToolChanged(_tool);
+        }
+
+        Side sideShow = _GetCursorClosestSide(&_rcSelection);
+        Side sidePenetrate = SIDE_NONE;
+        POINT ptShow = { 0 };
+
+        // If we have a penetration, then we'll invert the penetrated sides and try again.
+        if (S_FALSE == _ProjectFloatingToolbarPosition(sideShow, &sidePenetrate, &ptShow))
+        {
+            int sideShowNew = sideShow;
+
+            if (sidePenetrate & SIDE_RIGHT)
+            {
+                sideShowNew &= ~SIDE_RIGHT;
+                sideShowNew |= SIDE_LEFT;
+            }
+            else if (sidePenetrate & SIDE_LEFT)
+            {
+                sideShowNew &= ~SIDE_LEFT;
+                sideShowNew |= SIDE_RIGHT;
+            }
+
+            if (sidePenetrate & SIDE_BOTTOM)
+            {
+                sideShowNew &= ~SIDE_BOTTOM;
+                sideShowNew |= SIDE_TOP;
+            }
+            else if (sidePenetrate & SIDE_TOP)
+            {
+                sideShowNew &= ~SIDE_TOP;
+                sideShowNew |= SIDE_BOTTOM;
+            }
+
+            // Another failure probably means that the screen is too small to display our window,
+            // so we'll just allow it to overlap.
+            if (S_FALSE == _ProjectFloatingToolbarPosition((Side)sideShowNew, &sidePenetrate, &ptShow))
+            {
+                ptShow.x = _rcSelection.left;
+                ptShow.y = _rcSelection.top;
+                ClientToScreen(_hwnd, &ptShow);
+            }
         }
 
         if (_pFloatingToolbar)
@@ -3024,6 +3061,103 @@ void CScreenshotEditorWindow::_ShowFloatingToolbar()
             SetWindowPos(_pFloatingToolbar->GetHWND(), nullptr, ptShow.x, ptShow.y, 0, 0, SWP_NOSIZE | SWP_SHOWWINDOW);
         }
     }
+}
+
+HRESULT CScreenshotEditorWindow::_ProjectFloatingToolbarPosition(Side sideIn, IN OUT Side *pSidePenetrate, OUT POINT *pptOut)
+{
+    POINT ptShow = { 0 };
+    HMONITOR hMonitor = nullptr;
+
+    if (!_pFloatingToolbar)
+    {
+        return E_FAIL;
+    }
+
+    HRESULT hr = S_OK;
+    *pSidePenetrate = SIDE_NONE;
+
+    if (_fHasAnySelectionMade)
+    {
+        RECT rcSelectionScreen = _rcSelection;
+        MapWindowRect(_hwnd, HWND_DESKTOP, &rcSelectionScreen);
+
+        hMonitor = MonitorFromRect(&rcSelectionScreen, MONITOR_DEFAULTTONEAREST);
+
+        if (sideIn & SIDE_RIGHT)
+        {
+            ptShow.x = _rcSelection.right + 10;
+        }
+        else
+        {
+            ptShow.x = _rcSelection.left - 10;
+        }
+
+        if (sideIn & SIDE_BOTTOM)
+        {
+            ptShow.y = _rcSelection.bottom;
+        }
+        else
+        {
+            ptShow.y = _rcSelection.top;
+        }
+
+        ClientToScreen(_hwnd, &ptShow);
+    }
+    else
+    {
+        GetCursorPos(&ptShow);
+        hMonitor = MonitorFromPoint(ptShow, MONITOR_DEFAULTTONEAREST);
+    }
+
+    // If we're showing at the left and/or bottom, then we need to subtract the
+    // window width from the position so it doesn't overlap the rectangle.
+    RECT rcWindow;
+    GetWindowRect(_pFloatingToolbar->GetHWND(), &rcWindow);
+    if (_fHasAnySelectionMade)
+    {
+        if (sideIn & SIDE_LEFT)
+        {
+            ptShow.x -= RECTWIDTH(rcWindow);
+        }
+        if (sideIn & SIDE_BOTTOM)
+        {
+            ptShow.y -= RECTHEIGHT(rcWindow);
+        }
+    }
+
+    if (hMonitor)
+    {
+        MONITORINFO mi = { sizeof(mi) };
+        GetMonitorInfo(hMonitor, &mi);
+
+        RECT rcShow = rcWindow;
+        OffsetRect(&rcShow, -rcShow.left, -rcShow.top);
+        OffsetRect(&rcShow, ptShow.x, ptShow.y);
+
+        if (rcShow.right > mi.rcMonitor.right)
+        {
+            *(int *)pSidePenetrate |= SIDE_RIGHT;
+        }
+        else if (rcShow.left < mi.rcMonitor.left)
+        {
+            *(int *)pSidePenetrate |= SIDE_LEFT;
+        }
+
+        if (rcShow.bottom > mi.rcMonitor.bottom)
+        {
+            *(int *)pSidePenetrate |= SIDE_BOTTOM;
+        }
+        else if (rcShow.top < mi.rcMonitor.top)
+        {
+            *(int *)pSidePenetrate |= SIDE_TOP;
+        }
+
+        if (*pSidePenetrate != SIDE_NONE)
+            hr = S_FALSE;
+    }
+
+    *pptOut = ptShow;
+    return hr;
 }
 
 void CScreenshotEditorWindow::_HideFloatingToolbar()
@@ -3230,6 +3364,48 @@ HRESULT CScreenshotEditorWindow::_DoPreviewSelection(IScreenshotEditorObject *pO
     }
 
     return S_OK;
+}
+
+Side CScreenshotEditorWindow::_GetCursorClosestSide(RECT *prc)
+{
+    POINT ptCursor;
+    ASSERT_KEEP(SUCCEEDED(GetCursorPosition(&ptCursor)));
+
+    int result = SIDE_NONE;
+
+    int iDistLeft = prc->left - ptCursor.x;
+    int iDistRight = ptCursor.x - prc->right;
+    int iDistTop = prc->top - ptCursor.y;
+    int iDistBottom = ptCursor.y - prc->bottom;
+
+    if (iDistLeft < 0)
+        iDistLeft = -iDistLeft;
+    if (iDistRight < 0)
+        iDistRight = -iDistRight;
+    if (iDistTop < 0)
+        iDistTop = -iDistTop;
+    if (iDistBottom < 0)
+        iDistBottom = -iDistBottom;
+
+    if (iDistLeft < iDistRight)
+    {
+        result |= SIDE_LEFT;
+    }
+    else
+    {
+        result |= SIDE_RIGHT;
+    }
+
+    if (iDistTop < iDistBottom)
+    {
+        result |= SIDE_TOP;
+    }
+    else
+    {
+        result |= SIDE_BOTTOM;
+    }
+
+    return (Side)result;
 }
 
 HRESULT CScreenshotEditorWindow::_OnGetWindowPositions()

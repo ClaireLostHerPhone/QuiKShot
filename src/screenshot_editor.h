@@ -30,6 +30,20 @@ enum DragMode
     DRAGM_SIZESE = DRAGM_SIZES | DRAGM_SIZEE, // Bottom-right corner
 };
 
+enum Side
+{
+    SIDE_NONE   = 0,
+    SIDE_TOP    = 1,
+    SIDE_BOTTOM = 2,
+    SIDE_LEFT   = 1 << 2,
+    SIDE_RIGHT  = 2 << 2,
+
+    SIDE_TL     = SIDE_TOP | SIDE_LEFT,
+    SIDE_TR     = SIDE_TOP | SIDE_RIGHT,
+    SIDE_BL     = SIDE_BOTTOM | SIDE_LEFT,
+    SIDE_BR     = SIDE_BOTTOM | SIDE_RIGHT,
+};
+
 struct ExtensionToolInfo
 {
     IScreenshotEditorTool *pTool;
@@ -509,6 +523,7 @@ protected:
     HRESULT _ChangeTool(ScreenshotEditorTool newTool);
     HRESULT _EnsureToolbar();
     void _ShowFloatingToolbar();
+    HRESULT _ProjectFloatingToolbarPosition(Side sideIn, IN OUT Side *pSidePenetrate, OUT POINT *ptOut);
     void _HideFloatingToolbar();
     void _UpdateCursor();
     void _CancelSelection();
@@ -517,6 +532,7 @@ protected:
     IScreenshotEditorObject *_GetMousedOverObject();
     HRESULT _SelectObject(IScreenshotEditorObject *pObj);
     HRESULT _DoPreviewSelection(IScreenshotEditorObject *pObj);
+    Side _GetCursorClosestSide(RECT *prc);
 
     /**
      * Event callback from the window enumeration thread from the screenshot
