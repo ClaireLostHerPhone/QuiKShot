@@ -8,7 +8,7 @@ CConfigManager *g_pCfgMgrInst = nullptr;
 HRESULT CConfigManager::Initialize()
 {
     HKEY hkey = nullptr;
-    LSTATUS ls = RegOpenKeyEx(HKEY_CURRENT_USER, REGSTR_SCREENKIRK, 0, KEY_READ, &hkey);
+    LONG ls = RegOpenKeyEx(HKEY_CURRENT_USER, REGSTR_SCREENKIRK, 0, KEY_READ, &hkey);
     if (ls != ERROR_SUCCESS)
     {
         ls = RegCreateKey(HKEY_CURRENT_USER, REGSTR_SCREENKIRK, &hkey);
@@ -30,7 +30,7 @@ HRESULT CConfigManager::GetBool(const TCHAR *pszName, OUT bool *pfOut)
 
     DWORD dwValue = 0;
     DWORD dwcch = sizeof(DWORD);
-    LSTATUS ls = RegGetValue(_hkey, nullptr, pszName, RRF_RT_REG_DWORD, nullptr, &dwValue, &dwcch);
+    LONG ls = RegGetValue(_hkey, nullptr, pszName, RRF_RT_REG_DWORD, nullptr, &dwValue, &dwcch);
 
     if (ls == ERROR_SUCCESS)
     {
@@ -47,7 +47,7 @@ HRESULT CConfigManager::GetString(const TCHAR *pszName, OUT TCHAR **ppszOut)
         return E_POINTER;
 
     DWORD dwcch;
-    LSTATUS ls = RegGetValue(_hkey, nullptr, pszName, RRF_RT_REG_SZ, nullptr, nullptr, &dwcch);
+    LONG ls = RegGetValue(_hkey, nullptr, pszName, RRF_RT_REG_SZ, nullptr, nullptr, &dwcch);
 
     if (ls == ERROR_SUCCESS)
     {

@@ -1,5 +1,6 @@
 #pragma once
 #include "pch.h"
+#include "dynarray.h"
 
 struct WindowPositionRecord
 {
@@ -10,12 +11,6 @@ struct WindowPositionRecord
     TCHAR szWindowClass[MAX_PATH];
     RECT rcNonclient;
     RECT rcClient;
-};
-
-struct WindowPositionList
-{
-    WindowPositionList *pNext;
-    WindowPositionRecord rgRecords[16];
 };
 
 class CScreenshotContext : public IScreenshotContext
@@ -31,7 +26,7 @@ public:
     POINT _ptVirtualScreen;
     SIZE _sizeDesktop;
     POINT _ptCursor;
-    WindowPositionList *_pWndPosList; // A list of all windows, from highest to lowest z-index.
+    CDynamicArray<WindowPositionRecord> _vWndPos; // A list of all windows, from highest to lowest z-index.
     bool _fCursorVisible;
 
 	CScreenshotContext()
@@ -39,7 +34,6 @@ public:
         , _hbmCursorColor(nullptr)
         , _hbmCursorMask(nullptr)
         , _hbmModified(nullptr)
-		, _pWndPosList(nullptr)
         , _fCursorVisible(false)
 	{
         ZeroMemory(&_ptVirtualScreen, sizeof(_ptVirtualScreen));
@@ -52,23 +46,11 @@ public:
         DeleteObject(_hbmScreenshot);
         DeleteObject(_hbmCursorColor);
         DeleteObject(_hbmCursorMask);
-
-        if (_pWndPosList)
-        {
-            WindowPositionList *pAllocated = _pWndPosList;
-            do
-            {
-                WindowPositionList *pToDelete = pAllocated;
-                pAllocated = pAllocated->pNext;
-                delete pToDelete;
-            }
-            while (pAllocated->pNext);
-        }
     }
 
     inline bool WindowPositionsRetrieved()
     {
-        return _pWndPosList != nullptr;
+        return _vWndPos.GetSize() > 0;
     }
 
     typedef HRESULT (*OnGetWindowPositionsCB)();

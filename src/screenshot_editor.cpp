@@ -8,7 +8,6 @@
 #include <assert.h>
 #include "cursor.h"
 #include "cfgmgr.h"
-#include <ShlObj.h>
 
 //
 // CEditorToolbar
@@ -464,6 +463,7 @@ LRESULT CEditorActionsStrip::v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPAR
             LRESULT lr = _OnNotify(pnmh, wParam, lParam, &fHandled);
             if (fHandled)
                 return lr;
+			break;
         }
 
         case WM_MEASUREITEM:
@@ -724,9 +724,9 @@ LRESULT CEditorActionsStrip::_OnDrawItem(int idControl, DRAWITEMSTRUCT *pdis)
     if (pdis->CtlType == ODT_MENU)
     {
         if (pdis->itemID >= IDM_EXTERNEDITFIRST && pdis->itemID <= IDM_EXTERNEDITLAST
-            && _vExternEditors.GetSize() >= pdis->itemID - IDM_EXTERNEDITFIRST)
+            && _vExternEditors.GetSize() >= (size_t)pdis->itemID - IDM_EXTERNEDITFIRST)
         {
-            ExternalEditorDef *peed = &_vExternEditors.At(pdis->itemID - IDM_EXTERNEDITFIRST);
+            ExternalEditorDef *peed = &_vExternEditors.At((size_t)pdis->itemID - IDM_EXTERNEDITFIRST);
 
             int cxIcon = PortableGetSystemMetricsForDpi(SM_CXSMICON, _uDpi);
             int cyIcon = PortableGetSystemMetricsForDpi(SM_CYSMICON, _uDpi);
@@ -792,18 +792,6 @@ HRESULT CEditorActionsStrip::_LoadIcons()
 
 HRESULT CEditorActionsStrip::_EnumOpenWithHandlers()
 {
-    typedef HRESULT (WINAPI *SHAssocEnumHandlers_t)(
-        PCWSTR pszExtra,
-        ASSOC_FILTER afFilter,
-        IEnumAssocHandlers **ppEnumHandler
-    );
-
-    typedef int (WINAPI *Shell_GetCachedImageIndex_t)(
-        PCWSTR pwszIconPath,
-        int iIconIndex,
-        UINT uIconFlags
-    );
-
     HRESULT hr = E_FAIL;
 
     HMODULE hmShell32 = LoadLibrary(TEXT("shell32.dll"));
@@ -955,11 +943,6 @@ LRESULT CEditorFloatingToolbar::v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
             PostMessage(_pEditor->GetHWND(), uMsg, wParam, lParam);
             break;
         }
-
-        case WM_COMMAND:
-        {
-            return _OnCommand(wParam, lParam);
-        }
     }
 
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
@@ -1074,20 +1057,6 @@ HRESULT CEditorFloatingToolbar::_OnCreate()
     ShowWindow(_pActionStrip->GetHWND(), SW_SHOW);
 
     return S_OK;
-}
-
-LRESULT CEditorFloatingToolbar::_OnCommand(WPARAM wParam, LPARAM lParam)
-{
-    if (LOWORD(wParam) >= CEditorActionsStrip::IDM_TOOLFIRST)
-    {
-        SendMessage(_pToolbarTools->GetHWND(), WM_COMMAND, wParam - CEditorActionsStrip::IDM_TOOLFIRST, lParam);
-    }
-    else switch (LOWORD(wParam))
-    {
-        SendMessage(_pActionStrip->GetHWND(), WM_COMMAND, wParam, lParam);
-    }
-
-    return 0;
 }
 
 // static
@@ -2759,6 +2728,40 @@ LRESULT CScreenshotEditorWindow::_OnMouseRButtonDown(int x, int y, WPARAM flags)
             return 0;
         }
     }
+    
+    IScreenshotEditorObject *pObjHover = _GetMousedOverObject();
+    if (!_fIsSelectingRegion && pObjHover)
+    {
+        HMENU hMenu = CreatePopupMenu();
+        if (hMenu)
+        {
+            if (SUCCEEDED(_BuildObjectMenu(hMenu, pObjHover)))
+            {
+                POINT ptCursor;
+                GetCursorPos(&ptCursor);
+
+                IScreenshotEditorObject *pObjSelectOld = _pSelectedObject;
+                _SelectObject(pObjHover);
+
+                int iCmd = TrackPopupMenu(
+                    hMenu,
+                    TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RETURNCMD,
+                    ptCursor.x, ptCursor.y,
+                    0,
+                    _hwnd,
+                    nullptr
+                );
+
+                if (iCmd == IDM_REMOVEOBJECT)
+                {
+                    _RemoveObject(pObjHover);
+                }
+
+                _SelectObject(pObjSelectOld);
+            }
+            DestroyMenu(hMenu);
+        }
+    }
 
     return 0;
 }
@@ -3347,6 +3350,28 @@ HRESULT CScreenshotEditorWindow::_SelectObject(IScreenshotEditorObject *pObj)
         _pSelectedObject->AddRef();
 
     return _pRenderer->ChangeSelectedObject(pObj);
+}
+
+HRESULT CScreenshotEditorWindow::_BuildObjectMenu(HMENU hmenu, IScreenshotEditorObject *pObj)
+{
+    int idxMenuItem = 0;
+
+    if (pObj)
+    {
+        bool fIsSelectionTemplate = _tcscmp(pObj->GetClassName(), TEXT("quikshot.CScreenshotEditorSelectionObject")) == 0;
+
+        MENUITEMINFO mii = { sizeof(mii) };
+        mii.fMask = MIIM_ID | MIIM_STRING | MIIM_DATA;
+        mii.wID = IDM_REMOVEOBJECT;
+        mii.dwTypeData = fIsSelectionTemplate
+            ? (TCHAR *)TEXT("&Ignore region")
+            : (TCHAR *)TEXT("&Remove object");
+        mii.cch = _tcslen(mii.dwTypeData);
+        mii.dwItemData = (DWORD_PTR)pObj;
+        InsertMenuItem(hmenu, idxMenuItem++, FALSE, &mii);
+    }
+
+    return S_OK;
 }
 
 HRESULT CScreenshotEditorWindow::_DoPreviewSelection(IScreenshotEditorObject *pObj)

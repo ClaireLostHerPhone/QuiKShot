@@ -25,7 +25,7 @@ static HRESULT ParseKeyboardShortcutString(const TCHAR *psz, KeyboardShortcut *p
     static struct KeyMap
     {
         const UINT uiVirtualKey;
-        const TCHAR sz[12];
+        const TCHAR *psz;
     };
 
     static constexpr KeyMap rgModifierMap[] = {
@@ -120,7 +120,7 @@ static HRESULT ParseKeyboardShortcutString(const TCHAR *psz, KeyboardShortcut *p
 
         FOR_EACH(KeyMap km, rgModifierMap)
         {
-            if (km.sz && _tcsicmp(pszToken, km.sz) == 0)
+            if (km.psz && _tcsicmp(pszToken, km.psz) == 0)
             {
                 fHandled = true;
                 uiModifiers |= km.uiVirtualKey;
@@ -132,7 +132,7 @@ static HRESULT ParseKeyboardShortcutString(const TCHAR *psz, KeyboardShortcut *p
         {
             FOR_EACH(KeyMap km, rgNameMap)
             {
-                if (km.sz && _tcsicmp(pszToken, km.sz) == 0)
+                if (km.psz && _tcsicmp(pszToken, km.psz) == 0)
                 {
                     fHandled = true;
                     uiVirtualKey = km.uiVirtualKey;
@@ -314,10 +314,10 @@ class CSaveImage
         TCHAR szExtensions[MAX_PATH]; // Comma-separated list of extensions.
         union
         {
-            // When the time comes, this will need to be freed when this fucker is
-            // killed.
+            // provider == CP_EXTENSION
             IScreenshotEditorExtension *pOwnerExtension;
 
+            // provider == CP_WIC
             GUID guidWicContainerFormat;
         } providerData;
     };
@@ -385,6 +385,14 @@ CSaveImage::~CSaveImage()
     if (_pWicFactory)
         _pWicFactory->Release();
 #endif
+
+    FOR_EACH_DYNARR(CodecInfo &ci, _vCodecInfo)
+    {
+        if (ci.provider == CP_EXTENSION && ci.providerData.pOwnerExtension)
+        {
+            ci.providerData.pOwnerExtension->Release();
+        }
+    }
 }
 
 HRESULT CSaveImage::Initialize()

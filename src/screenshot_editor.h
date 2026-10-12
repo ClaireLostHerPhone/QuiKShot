@@ -181,7 +181,6 @@ protected:
     LRESULT v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) override;
 
     HRESULT _OnCreate();
-    LRESULT _OnCommand(WPARAM wParam, LPARAM lParam);
 
 public:
     static HRESULT RegisterWindowClass();
@@ -531,6 +530,7 @@ protected:
     HRESULT _RemoveObject(IScreenshotEditorObject *pObj);
     IScreenshotEditorObject *_GetMousedOverObject();
     HRESULT _SelectObject(IScreenshotEditorObject *pObj);
+    HRESULT _BuildObjectMenu(HMENU hmenu, IScreenshotEditorObject *pObj);
     HRESULT _DoPreviewSelection(IScreenshotEditorObject *pObj);
     Side _GetCursorClosestSide(RECT *prc);
 
@@ -552,6 +552,11 @@ public:
         WM_SSE_SAVEIMAGE,
         WM_SSE_SHOWCURSOR,
         WM_SSE_HIDECURSOR,
+    };
+
+    enum Command
+    {
+        IDM_REMOVEOBJECT = 200,
     };
 
     //@Begin IUnknown
