@@ -254,3 +254,88 @@ HBITMAP HICONToHBITMAP(HICON hicon)
 
     return nullptr;
 }
+
+HRESULT PremultiplyAlpha(HBITMAP hbmIn, OUT HBITMAP *phbmOut)
+{
+    BITMAP bm;
+    if (!GetObject(hbmIn, sizeof(bm), &bm))
+    {
+        return HRESULT_FROM_WIN32(GetLastError());
+    }
+
+    bool fAnyAlphaPixel = false;
+
+    HDC hdcDesktop = GetDC(HWND_DESKTOP);
+    if (hdcDesktop)
+    {
+        HDC hdc = CreateCompatibleDC(hdcDesktop);
+        if (hdc)
+        {
+            BITMAPINFO bmi = { 0 };
+            bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
+            bmi.bmiHeader.biWidth = bm.bmWidth;
+            bmi.bmiHeader.biHeight = bm.bmHeight;
+            bmi.bmiHeader.biPlanes = 1;
+            bmi.bmiHeader.biBitCount = 32;
+            bmi.bmiHeader.biCompression = BI_RGB;
+            bmi.bmiHeader.biSizeImage = 0;
+
+            void *pvPixels = nullptr;
+            *phbmOut = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &pvPixels, nullptr, 0);
+            if (*phbmOut)
+            {
+                HGDIOBJ hObjOld = SelectObject(hdc, *phbmOut);
+
+                HDC hdcOrig = CreateCompatibleDC(hdcDesktop);
+                HGDIOBJ hObjOld2 = SelectObject(hdcOrig, hbmIn);
+
+                BitBlt(hdc, 0, 0, bm.bmWidth, bm.bmHeight, hdcOrig, 0, 0, SRCCOPY);
+
+                SelectObject(hdcOrig, hObjOld2);
+                DeleteDC(hdcOrig);
+
+                int cLength = bm.bmWidth * bm.bmHeight;
+                ULONG *pulSrc = (ULONG *)pvPixels;
+                BYTE bFirstAlpha = (pulSrc[0] & 0xFF000000) >> 24;
+                for (int y = 0; y < bm.bmHeight; y++)
+                {
+                    for (int x = 0; x < bm.bmWidth; x++)
+                    {
+                        BYTE b = GetBValue(*pulSrc);
+                        BYTE g = GetGValue(*pulSrc);
+                        BYTE r = GetRValue(*pulSrc);
+                        BYTE a = (*pulSrc & 0xFF000000) >> 24;
+
+                        if (a != bFirstAlpha)
+                        {
+                            b = (b * a) / 255;
+                            g = (g * a) / 255;
+                            r = (r * a) / 255;
+
+                            *pulSrc = r | (g << 8) | (b << 16) | (a << 24);
+
+                            fAnyAlphaPixel = true;
+                        }
+
+                        pulSrc += 1;
+                    }
+                }
+
+                SelectObject(hdc, hObjOld);
+            }
+
+            DeleteDC(hdc);
+        }
+
+        ReleaseDC(HWND_DESKTOP, hdcDesktop);
+    }
+
+    if (!fAnyAlphaPixel)
+    {
+        DeleteObject(*phbmOut);
+        *phbmOut = nullptr;
+        return S_FALSE;
+    }
+
+    return S_OK;
+}

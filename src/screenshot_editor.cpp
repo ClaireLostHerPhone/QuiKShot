@@ -463,6 +463,22 @@ LRESULT CEditorActionsStrip::v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPAR
                 return lr;
         }
 
+        case WM_MEASUREITEM:
+        {
+            MEASUREITEMSTRUCT* lpmis = (MEASUREITEMSTRUCT*)lParam;
+            if (lpmis==NULL)
+                break;
+            lpmis->itemWidth += 2;
+            if (lpmis->itemHeight < 16)
+                lpmis->itemHeight = 16;
+            return 1;
+        }
+
+        case WM_DRAWITEM:
+        {
+            return _OnDrawItem(wParam, (DRAWITEMSTRUCT *)lParam);
+        }
+
         default:
         {
             if (_hwndActions && uMsg >= WM_USER)
@@ -589,6 +605,7 @@ LRESULT CEditorActionsStrip::_OnDestroy()
 
     FOR_EACH_DYNARR(ExternalEditorDef &eed, _vExternEditors)
     {
+        DestroyIcon(eed.hIcon);
         DeleteObject(eed.hbmIcon);
     }
 
@@ -662,10 +679,28 @@ LRESULT CEditorActionsStrip::_OnNotify(NMHDR *pnmh, WPARAM wParam, LPARAM lParam
         {
             MENUITEMINFO mii = { sizeof(mii) };
             mii.fMask = MIIM_ID | MIIM_STRING | MIIM_BITMAP;
-            mii.wID = 0; // <- TODO: Change.
+            mii.wID = IDM_EXTERNEDITFIRST + idxMenuItem;
             mii.dwTypeData = (TCHAR *)eed.szName;
             mii.cch = _tcslen(eed.szName);
-            mii.hbmpItem = eed.hbmIcon;
+            //mii.hbmpItem = HBMMENU_CALLBACK;
+            mii.hbmpItem = eed.hbmIcon; // TODO: See what systems premultiplied alpha works on.
+            InsertMenuItem(hMenu, idxMenuItem++, FALSE, &mii);
+        }
+
+        {
+            MENUITEMINFO mii = { sizeof(mii) };
+            mii.fMask = MIIM_TYPE;
+            mii.wID = 0;
+            mii.fType = MFT_SEPARATOR;
+            InsertMenuItem(hMenu, idxMenuItem++, FALSE, &mii);
+        }
+
+        {
+            MENUITEMINFO mii = { sizeof(mii) };
+            mii.fMask = MIIM_ID | MIIM_STRING;
+            mii.wID = IDM_EXTERNEDITMANAGE;
+            mii.dwTypeData = (TCHAR *)TEXT("&Manage programs...");
+            mii.cch = _tcslen(mii.dwTypeData);
             InsertMenuItem(hMenu, idxMenuItem++, FALSE, &mii);
         }
 
@@ -678,6 +713,33 @@ LRESULT CEditorActionsStrip::_OnNotify(NMHDR *pnmh, WPARAM wParam, LPARAM lParam
     }
 
     return 0;
+}
+
+LRESULT CEditorActionsStrip::_OnDrawItem(int idControl, DRAWITEMSTRUCT *pdis)
+{
+    if (pdis->CtlType == ODT_MENU)
+    {
+        if (pdis->itemID >= IDM_EXTERNEDITFIRST && pdis->itemID <= IDM_EXTERNEDITLAST
+            && _vExternEditors.GetSize() >= pdis->itemID - IDM_EXTERNEDITFIRST)
+        {
+            ExternalEditorDef *peed = &_vExternEditors.At(pdis->itemID - IDM_EXTERNEDITFIRST);
+            
+            DrawIconEx(
+                pdis->hDC,
+                pdis->rcItem.left - 16,
+                pdis->rcItem.top + (pdis->rcItem.bottom - pdis->rcItem.top - 16) / 2,
+                peed->hIcon,
+                16, 16,
+                0,
+                nullptr,
+                DI_NORMAL
+            );
+
+            return 1;
+        }
+    }
+
+    return DefWindowProc(_hwnd, WM_DRAWITEM, idControl, (LPARAM)pdis);
 }
 
 HRESULT CEditorActionsStrip::_LoadIcons()
@@ -772,8 +834,19 @@ HRESULT CEditorActionsStrip::_EnumOpenWithHandlers()
                     {
                         HICON hicon;
                         ExtractIconEx(pszIconPath, 0, nullptr, &hicon, 1);
-                        eed.hbmIcon = HICONToHBITMAP(hicon);
-                        DestroyIcon(hicon);
+                        eed.hIcon = hicon;
+                        HBITMAP hbmIconRaw = HICONToHBITMAP(hicon);
+                        HBITMAP hbmPremult = nullptr;
+                        PremultiplyAlpha(hbmIconRaw, &hbmPremult);
+                        if (hbmPremult)
+                        {
+                            eed.hbmIcon = hbmPremult;
+                            DeleteObject(hbmIconRaw);
+                        }
+                        else
+                        {
+                            eed.hbmIcon = hbmIconRaw;
+                        }
 
                         CoTaskMemFree(pszIconPath);
                     }

@@ -94,6 +94,7 @@ private:
     {
         TCHAR szName[MAX_PATH];
         TCHAR szProgramPath[MAX_PATH];
+        HICON hIcon;
         HBITMAP hbmIcon;
     };
 
@@ -112,6 +113,7 @@ protected:
     LRESULT _OnDestroy();
     LRESULT _OnCommand(WPARAM wParam, LPARAM lParam);
     LRESULT _OnNotify(NMHDR *pnmh, WPARAM wParam, LPARAM lParam, bool *pfHandled);
+    LRESULT _OnDrawItem(int idControl, DRAWITEMSTRUCT *pdis);
 
     HRESULT _LoadIcons();
     HRESULT _EnumOpenWithHandlers();
@@ -124,7 +126,11 @@ public:
         IDM_SAVE,
         IDM_OPENINEXTERNALEDITOR,
 
-        IDM_TOOLFIRST = 200,
+        IDM_EXTERNEDITMANAGE = 200,
+        IDM_EXTERNEDITFIRST = 201,
+        IDM_EXTERNEDITLAST = 299,
+
+        IDM_TOOLFIRST = 300,
     };
 
     static HRESULT RegisterWindowClass();

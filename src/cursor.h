@@ -10,7 +10,6 @@ class CCursorRenderer
 	POINT _ptCursor;
 
 	HRESULT _BlurCursorBitmap(HBITMAP hbm);
-	HRESULT _PremultiplyAlpha(HBITMAP hbmIn, OUT HBITMAP *phbmOut);
 
 public:
 	CCursorRenderer(HBITMAP hbmScreenshot, HCURSOR hcursor, HBITMAP hbmCursorColor, HBITMAP hbmCursorMask, POINT ptCursor)

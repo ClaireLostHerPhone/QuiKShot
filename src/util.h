@@ -19,6 +19,52 @@ struct OSVersion
     {
         return (flags & OSVF_WINNT);
     }
+
+    inline bool IsGreaterEqualVersion(DWORD dwMajorExpect, DWORD dwMinorExpect)
+    {
+        if (dwMajorVersion > dwMajorExpect)
+        {
+            return true;
+        }
+        else if (dwMajorVersion == dwMajorExpect)
+        {
+            if (dwMinorVersion >= dwMinorExpect)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    inline bool IsLessEqualVersion(DWORD dwMajorExpect, DWORD dwMinorExpect)
+    {
+        if (dwMajorVersion < dwMajorExpect)
+        {
+            return true;
+        }
+        else if (dwMajorVersion == dwMajorExpect)
+        {
+            if (dwMinorVersion <= dwMinorExpect)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        else
+        {
+            return false;
+        }
+    }
 };
 
 OSVersion *GetOSVersion();
@@ -29,3 +75,4 @@ HRESULT PathPopFileName(TCHAR *pszPath);
 HRESULT PathAppend(TCHAR *pszPath, const TCHAR *pszPath2);
 HRESULT CopyBitmap(HBITMAP *phbmDest, HBITMAP hbmSrc, RECT *prcCrop = nullptr);
 HBITMAP HICONToHBITMAP(HICON hicon);
+HRESULT PremultiplyAlpha(HBITMAP hbmIn, OUT HBITMAP *phbmOut);
