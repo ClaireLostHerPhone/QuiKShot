@@ -105,10 +105,11 @@ LRESULT CEditorToolbar::_OnCreate(CREATESTRUCT *pcs)
     {
         int &i = cSuccessfulTools;
 
-        int iSizeIcon = MulDiv(16, 96, _uDpi);
-        HICON hiconSelect = (HICON)LoadImage(g_hinst, MAKEINTRESOURCE(IDI_TOOLSELECT), IMAGE_ICON, iSizeIcon, iSizeIcon, LR_DEFAULTCOLOR);
-        HICON hiconMove = (HICON)LoadImage(g_hinst, MAKEINTRESOURCE(IDI_TOOLMOVE), IMAGE_ICON, iSizeIcon, iSizeIcon, LR_DEFAULTCOLOR);
-        HICON hiconCursorShow = (HICON)LoadImage(g_hinst, MAKEINTRESOURCE(IDI_TOOLCURSORSHOW), IMAGE_ICON, iSizeIcon, iSizeIcon, LR_DEFAULTCOLOR);
+        int cxIcon = PortableGetSystemMetricsForDpi(SM_CXSMICON, _uDpi);
+        int cyIcon = PortableGetSystemMetricsForDpi(SM_CYSMICON, _uDpi);
+        HICON hiconSelect = (HICON)LoadImage(g_hinst, MAKEINTRESOURCE(IDI_TOOLSELECT), IMAGE_ICON, cxIcon, cyIcon, LR_DEFAULTCOLOR);
+        HICON hiconMove = (HICON)LoadImage(g_hinst, MAKEINTRESOURCE(IDI_TOOLMOVE), IMAGE_ICON, cxIcon, cyIcon, LR_DEFAULTCOLOR);
+        HICON hiconCursorShow = (HICON)LoadImage(g_hinst, MAKEINTRESOURCE(IDI_TOOLCURSORSHOW), IMAGE_ICON, cxIcon, cyIcon, LR_DEFAULTCOLOR);
 
         int idxIcon = 0;
 
@@ -180,7 +181,8 @@ LRESULT CEditorToolbar::_OnCreate(CREATESTRUCT *pcs)
             if (SUCCEEDED(_pEditor->GetExtensionToolInfo(j, &eti)))
             {
                 SIZE size;
-                size.cx = size.cy = MulDiv(16, 96, _uDpi);
+                size.cx = PortableGetSystemMetricsForDpi(SM_CXSMICON, _uDpi);
+                size.cy = PortableGetSystemMetricsForDpi(SM_CYSMICON, _uDpi);
                 HICON hiconExtTool = eti.pTool->GetToolIcon(size);
                 int idxExtToolIcon = 0;
                 if (hiconExtTool)
@@ -284,11 +286,12 @@ LRESULT CEditorToolbar::_OnNotify(NMHDR *pnmh, WPARAM wParam, bool *pfHandled)
 
 HRESULT CEditorToolbar::_GenerateToolIcon(const TCHAR *pszToolName, OUT HBITMAP *phbmOut)
 {
-    const int iSizeIcon = MulDiv(16, 96, _uDpi);
+    int cxIcon = PortableGetSystemMetricsForDpi(SM_CXSMICON, _uDpi);
+    int cyIcon = PortableGetSystemMetricsForDpi(SM_CYSMICON, _uDpi);
 
     HDC hdcDesktop = GetDC(HWND_DESKTOP);
     HDC hdc = CreateCompatibleDC(hdcDesktop);
-    HBITMAP hbm = CreateCompatibleBitmap(hdcDesktop, iSizeIcon, iSizeIcon);
+    HBITMAP hbm = CreateCompatibleBitmap(hdcDesktop, cxIcon, cyIcon);
 
     HGDIOBJ hBmpOld = SelectObject(hdc, hbm);
     HBRUSH hbr = (HBRUSH)GetStockObject(WHITE_BRUSH);
@@ -297,7 +300,7 @@ HRESULT CEditorToolbar::_GenerateToolIcon(const TCHAR *pszToolName, OUT HBITMAP 
     HPEN hpen = (HPEN)GetStockObject(BLACK_PEN);
     HGDIOBJ hPenOld = SelectObject(hdc, hpen);
 
-    Rectangle(hdc, 0, 0, iSizeIcon, iSizeIcon);
+    Rectangle(hdc, 0, 0, cxIcon, cyIcon);
 
     NONCLIENTMETRICS ncm = { 0 };
     ncm.cbSize = sizeof(ncm);
@@ -309,7 +312,7 @@ HRESULT CEditorToolbar::_GenerateToolIcon(const TCHAR *pszToolName, OUT HBITMAP 
 
     RECT rcText;
     rcText.left = rcText.top = 0;
-    rcText.right = rcText.bottom = iSizeIcon;
+    rcText.right = rcText.bottom = cyIcon;
     InflateRect(&rcText, -1, -1);
     DrawText(hdc, pszToolName, 1, &rcText, DT_CENTER | DT_VCENTER);
 
@@ -468,9 +471,10 @@ LRESULT CEditorActionsStrip::v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPAR
             MEASUREITEMSTRUCT* lpmis = (MEASUREITEMSTRUCT*)lParam;
             if (lpmis==NULL)
                 break;
-            lpmis->itemWidth += 2;
-            if (lpmis->itemHeight < 16)
-                lpmis->itemHeight = 16;
+            int cyIcon = PortableGetSystemMetricsForDpi(SM_CYSMICON, _uDpi);
+            lpmis->itemWidth += MulDiv(2, 96, _uDpi);
+            if (lpmis->itemHeight < cyIcon)
+                lpmis->itemHeight = cyIcon;
             return 1;
         }
 
@@ -723,13 +727,16 @@ LRESULT CEditorActionsStrip::_OnDrawItem(int idControl, DRAWITEMSTRUCT *pdis)
             && _vExternEditors.GetSize() >= pdis->itemID - IDM_EXTERNEDITFIRST)
         {
             ExternalEditorDef *peed = &_vExternEditors.At(pdis->itemID - IDM_EXTERNEDITFIRST);
+
+            int cxIcon = PortableGetSystemMetricsForDpi(SM_CXSMICON, _uDpi);
+            int cyIcon = PortableGetSystemMetricsForDpi(SM_CYSMICON, _uDpi);
             
             DrawIconEx(
                 pdis->hDC,
-                pdis->rcItem.left - 16,
-                pdis->rcItem.top + (pdis->rcItem.bottom - pdis->rcItem.top - 16) / 2,
+                pdis->rcItem.left - cxIcon,
+                pdis->rcItem.top + (pdis->rcItem.bottom - pdis->rcItem.top - cyIcon) / 2,
                 peed->hIcon,
-                16, 16,
+                cxIcon, cyIcon,
                 0,
                 nullptr,
                 DI_NORMAL
@@ -747,23 +754,24 @@ HRESULT CEditorActionsStrip::_LoadIcons()
     if (GetOSVersion()->dwMajorVersion >= 5 && !(GetOSVersion()->dwMajorVersion == 5 && GetOSVersion()->dwMinorVersion < 1))
     {
         HMODULE hmShell32 = LoadLibrary(TEXT("shell32.dll"));
-        const int iSizeIcon = MulDiv(16, 96, _uDpi);
+        int cxIcon = PortableGetSystemMetricsForDpi(SM_CXSMICON, _uDpi);
+        int cyIcon = PortableGetSystemMetricsForDpi(SM_CYSMICON, _uDpi);
 
-        HICON hiconDiscard = (HICON)LoadImage(hmShell32, MAKEINTRESOURCE(240), IMAGE_ICON, iSizeIcon, iSizeIcon, 0);
+        HICON hiconDiscard = (HICON)LoadImage(hmShell32, MAKEINTRESOURCE(240), IMAGE_ICON, cxIcon, cyIcon, 0);
         if (hiconDiscard)
         {
             _hbmIconDiscard = HICONToHBITMAP(hiconDiscard);
             DestroyIcon(hiconDiscard);
         }
 
-        HICON hiconCopy = (HICON)LoadImage(hmShell32, MAKEINTRESOURCE(243), IMAGE_ICON, iSizeIcon, iSizeIcon, 0);
+        HICON hiconCopy = (HICON)LoadImage(hmShell32, MAKEINTRESOURCE(243), IMAGE_ICON, cxIcon, cyIcon, 0);
         if (hiconCopy)
         {
             _hbmIconCopy = HICONToHBITMAP(hiconCopy);
             DestroyIcon(hiconCopy);
         }
 
-        HICON hiconSave = (HICON)LoadImage(hmShell32, MAKEINTRESOURCE(16761), IMAGE_ICON, iSizeIcon, iSizeIcon, 0);
+        HICON hiconSave = (HICON)LoadImage(hmShell32, MAKEINTRESOURCE(16761), IMAGE_ICON, cxIcon, cyIcon, 0);
         if (hiconSave)
         {
             _hbmIconSave = HICONToHBITMAP(hiconSave);
