@@ -2729,7 +2729,8 @@ LRESULT CScreenshotEditorWindow::_OnMouseLButtonUp(int x, int y, WPARAM flags)
     {
         RECT rcObjCur;
         _pSelectedObject->GetLogicalRect(&rcObjCur);
-        _pHistoryMgr->PushObjectMove(_pSelectedObject, &rcObjCur, &_rcDragBegin);
+        if (!(_pSelectedObject->GetFlags() & SSEOF_NOMOVEHISTORY))
+            _pHistoryMgr->PushObjectMove(_pSelectedObject, &rcObjCur, &_rcDragBegin);
     }
     else if (_IsExtensionTool())
     {
@@ -3355,7 +3356,8 @@ HRESULT CScreenshotEditorWindow::_RemoveObject(IScreenshotEditorObject *pObj)
             // The resulting history entry will add a reference to the object and hold
             // it until it is destroyed. If we did it the other way around, then we risk
             // freeing the object from memory (thus breaking redo functionality)
-            _pHistoryMgr->PushObjectRemove(pObj);
+            if (!(pObj->GetFlags() & SSEOF_NOINSERTIONHISTORY))
+                _pHistoryMgr->PushObjectRemove(pObj);
 
             pObj->Release();
             _vObjs.Remove(i);
@@ -3571,7 +3573,8 @@ STDMETHODIMP CScreenshotEditorWindow::InsertObject(IScreenshotEditorObject *pObj
             _RemoveObject(pObj);
         }
 
-        _pHistoryMgr->PushObjectCreate(pObj);
+        if (!(pObj->GetFlags() & SSEOF_NOINSERTIONHISTORY))
+            _pHistoryMgr->PushObjectCreate(pObj);
 
         InvalidateObject(pObj);
         hr = S_OK;

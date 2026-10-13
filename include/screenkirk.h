@@ -139,6 +139,8 @@ DEFINE_GUID(IID_IScreenshotEditorObjectRendererGDI,
 #define SSEOF_FIXEDZORDER                   (1 << 2)
 #define SSEOF_SELECTIONTEMPLATE             (1 << 3)
 #define SSEOF_NORENDERER                    (1 << 4)
+#define SSEOF_NOINSERTIONHISTORY            (1 << 5)
+#define SSEOF_NOMOVEHISTORY                 (1 << 6)
 //@End IScreenshotEditorObject::GetFlags() flags
 
 /**
@@ -205,10 +207,40 @@ DECLARE_INTERFACE_IID_(IScreenshotEditorObject, IObjectWithSite, "{841C133A-9960
      * Creates a renderer for this object.
      */
     STDMETHOD(CreateRenderer)(THIS_ REFIID riid, OUT IScreenshotEditorObjectRenderer **ppRendererOut) PURE;
+
+    /**
+     * Creates a history manager for this object.
+     * 
+     * This is an optional interface to provide. If an object does not provide a history manager, return
+     * E_NOIMPL.
+     */
+    STDMETHOD(CreateHistoryManager)(THIS_ REFIID riid, OUT interface IScreenshotEditorObjectHistoryManager **ppHistoryManagerOut) PURE;
 };
 // {841C133A-9960-44C3-9E95-C1349C731401}
 DEFINE_GUID(IID_IScreenshotEditorObject,
     0x841c133a, 0x9960, 0x44c3, 0x9e, 0x95, 0xc1, 0x34, 0x9c, 0x73, 0x14, 0x1);
+
+
+/**
+ * Manages the history of a screenshot editor object.
+ */
+#undef INTERFACE
+#define INTERFACE IScreenshotEditorObjectHistoryManager
+DECLARE_INTERFACE_IID_(IScreenshotEditorObjectHistoryManager, IUnknown, "{F5F3E4FE-BA5E-4B6A-8455-3AD56A167993}")
+{
+    STDMETHOD(QueryInterface)(THIS_ REFIID riid, OUT void **ppvOut) PURE;
+    STDMETHOD_(ULONG, AddRef)(THIS) PURE;
+    STDMETHOD_(ULONG, Release)(THIS) PURE;
+    STDMETHOD(SetSite)(THIS_ IUnknown * pUnkSite) PURE;
+    STDMETHOD(GetSite)(THIS_ REFIID riid, void **ppvSite) PURE;
+
+    STDMETHOD(Undo)(THIS) PURE;
+    STDMETHOD(Redo)(THIS) PURE;
+};
+
+// {F5F3E4FE-BA5E-4B6A-8455-3AD56A167993}
+DEFINE_GUID(IID_IScreenshotEditorObjectHistoryManager, 
+    0xf5f3e4fe, 0xba5e, 0x4b6a, 0x84, 0x55, 0x3a, 0xd5, 0x6a, 0x16, 0x79, 0x93);
 
 //@Begin IScreenshotEditorTool::GetFlags() flags
 #define SSETF_DRAWSELECTION (1 << 0)
