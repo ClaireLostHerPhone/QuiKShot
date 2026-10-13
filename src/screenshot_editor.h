@@ -533,15 +533,7 @@ protected:
     HRESULT _BuildObjectMenu(HMENU hmenu, IScreenshotEditorObject *pObj);
     HRESULT _DoPreviewSelection(IScreenshotEditorObject *pObj);
     Side _GetCursorClosestSide(RECT *prc);
-
-    /**
-     * Event callback from the window enumeration thread from the screenshot
-     * manager.
-     * 
-     * This runs in another thread, and posts a message to the UI message for
-     * most functionality.
-     */
-    HRESULT _OnGetWindowPositions();
+    HRESULT _BuildSelectionTemplatesForMonitors();
 
 public:
     enum WM

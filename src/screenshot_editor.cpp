@@ -2271,6 +2271,8 @@ LRESULT CScreenshotEditorWindow::v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, 
 
         case WM_SSE_GETWINDOWPOSITIONS:
         {
+            _fEnumeratedWindows = true;
+
             // Update the cursor now that enumeration is complete.
             _UpdateCursor();
             return 0;
@@ -2316,9 +2318,9 @@ LRESULT CScreenshotEditorWindow::v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, 
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
-LRESULT CScreenshotEditorWindow::_OnCreate(CREATESTRUCT *pCs)
+LRESULT CScreenshotEditorWindow::_OnCreate(CREATESTRUCT *pcs)
 {
-    ASSERT_KEEP(_pScreenshotCtx = (CScreenshotContext *)pCs->lpCreateParams);
+    ASSERT_KEEP(_pScreenshotCtx = (CScreenshotContext *)pcs->lpCreateParams);
     ASSERT_KEEP(_pRenderer = new CScreenshotEditorRendererGDI(_pScreenshotCtx, _hwnd));
     if (FAILED(_pRenderer->Initialize()))
     {
@@ -2330,19 +2332,9 @@ LRESULT CScreenshotEditorWindow::_OnCreate(CREATESTRUCT *pCs)
 
     ASSERT_KEEP(SUCCEEDED(_LoadExtensionTools()));
 
-    // Testing:
-    _pHistoryMgr->Lock();
-    CScreenshotEditorSelectionTemplateObject *pSelPreviewTest = new (std::nothrow) CScreenshotEditorSelectionTemplateObject();
-    RECT rcSelPreview = { 0 };
-    rcSelPreview.left = 2500;
-    rcSelPreview.right = 2500 + 1000;
-    rcSelPreview.top = 550;
-    rcSelPreview.bottom = 550 + 200;
-    pSelPreviewTest->Move(&rcSelPreview);
-    InsertObject(pSelPreviewTest);
-    _pHistoryMgr->Unlock();
+    ASSERT_KEEP(SUCCEEDED(_BuildSelectionTemplatesForMonitors()));
 
-    return DefWindowProc(_hwnd, WM_CREATE, 0, (LPARAM)pCs);
+    return DefWindowProc(_hwnd, WM_CREATE, 0, (LPARAM)pcs);
 }
 
 LRESULT CScreenshotEditorWindow::_OnDestroy()
@@ -3456,10 +3448,33 @@ Side CScreenshotEditorWindow::_GetCursorClosestSide(RECT *prc)
     return (Side)result;
 }
 
-HRESULT CScreenshotEditorWindow::_OnGetWindowPositions()
+static BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdc, RECT *prc, LPARAM lParam)
 {
-    _fEnumeratedWindows = true;
-    PostMessage(_hwnd, WM_SSE_GETWINDOWPOSITIONS, 0, 0);
+    CDynamicArray<RECT> *pvrc = (CDynamicArray<RECT> *)lParam;
+    pvrc->Push(*prc);
+    return TRUE;
+}
+
+HRESULT CScreenshotEditorWindow::_BuildSelectionTemplatesForMonitors()
+{
+    _pHistoryMgr->Lock();
+
+    CDynamicArray<RECT> vrc;
+    EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, (LPARAM)&vrc);
+
+    FOR_EACH_DYNARR(RECT &rc, vrc)
+    {
+        MapWindowRect(HWND_DESKTOP, _hwnd, &rc);
+
+        CScreenshotEditorSelectionTemplateObject *pSelTempl = new (std::nothrow) CScreenshotEditorSelectionTemplateObject();
+        if (pSelTempl)
+        {
+            pSelTempl->Move(&rc);
+            InsertObject(pSelTempl);
+        }
+    }
+
+    _pHistoryMgr->Unlock();
     return S_OK;
 }
 
