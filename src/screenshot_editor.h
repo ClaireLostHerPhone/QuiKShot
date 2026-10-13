@@ -522,7 +522,7 @@ protected:
     HRESULT _ChangeTool(ScreenshotEditorTool newTool);
     HRESULT _EnsureToolbar();
     void _ShowFloatingToolbar();
-    HRESULT _ProjectFloatingToolbarPosition(Side sideIn, IN OUT Side *pSidePenetrate, OUT POINT *ptOut);
+    HRESULT _ProjectFloatingToolbarPosition(Side sideIn, RECT *prcBox, IN OUT Side *pSidePenetrate, OUT POINT *ptOut);
     void _HideFloatingToolbar();
     void _UpdateCursor();
     void _CancelSelection();

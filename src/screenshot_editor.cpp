@@ -3018,12 +3018,18 @@ void CScreenshotEditorWindow::_ShowFloatingToolbar()
             _pToolbar->OnToolChanged(_tool);
         }
 
-        Side sideShow = _GetCursorClosestSide(&_rcSelection);
+        RECT rcBox = _rcSelection;
+        if (_pSelectedObject)
+        {
+            ASSERT_KEEP(SUCCEEDED(_pSelectedObject->GetLogicalRect(&rcBox)));
+        }
+
+        Side sideShow = _GetCursorClosestSide(&rcBox);
         Side sidePenetrate = SIDE_NONE;
         POINT ptShow = { 0 };
 
         // If we have a penetration, then we'll invert the penetrated sides and try again.
-        if (S_FALSE == _ProjectFloatingToolbarPosition(sideShow, &sidePenetrate, &ptShow))
+        if (S_FALSE == _ProjectFloatingToolbarPosition(sideShow, &rcBox, &sidePenetrate, &ptShow))
         {
             int sideShowNew = sideShow;
 
@@ -3051,10 +3057,10 @@ void CScreenshotEditorWindow::_ShowFloatingToolbar()
 
             // Another failure probably means that the screen is too small to display our window,
             // so we'll just allow it to overlap.
-            if (S_FALSE == _ProjectFloatingToolbarPosition((Side)sideShowNew, &sidePenetrate, &ptShow))
+            if (S_FALSE == _ProjectFloatingToolbarPosition((Side)sideShowNew, &rcBox, &sidePenetrate, &ptShow))
             {
-                ptShow.x = _rcSelection.left;
-                ptShow.y = _rcSelection.top;
+                ptShow.x = rcBox.left;
+                ptShow.y = rcBox.top;
                 ClientToScreen(_hwnd, &ptShow);
             }
         }
@@ -3066,7 +3072,8 @@ void CScreenshotEditorWindow::_ShowFloatingToolbar()
     }
 }
 
-HRESULT CScreenshotEditorWindow::_ProjectFloatingToolbarPosition(Side sideIn, IN OUT Side *pSidePenetrate, OUT POINT *pptOut)
+HRESULT CScreenshotEditorWindow::_ProjectFloatingToolbarPosition(
+    Side sideIn, RECT *prcBox, IN OUT Side *pSidePenetrate, OUT POINT *pptOut)
 {
     POINT ptShow = { 0 };
     HMONITOR hMonitor = nullptr;
@@ -3081,27 +3088,27 @@ HRESULT CScreenshotEditorWindow::_ProjectFloatingToolbarPosition(Side sideIn, IN
 
     if (_fHasAnySelectionMade)
     {
-        RECT rcSelectionScreen = _rcSelection;
-        MapWindowRect(_hwnd, HWND_DESKTOP, &rcSelectionScreen);
+        RECT rcBoxScreen = *prcBox;
+        MapWindowRect(_hwnd, HWND_DESKTOP, &rcBoxScreen);
 
-        hMonitor = MonitorFromRect(&rcSelectionScreen, MONITOR_DEFAULTTONEAREST);
+        hMonitor = MonitorFromRect(&rcBoxScreen, MONITOR_DEFAULTTONEAREST);
 
         if (sideIn & SIDE_RIGHT)
         {
-            ptShow.x = _rcSelection.right + 10;
+            ptShow.x = prcBox->right + 10;
         }
         else
         {
-            ptShow.x = _rcSelection.left - 10;
+            ptShow.x = prcBox->left - 10;
         }
 
         if (sideIn & SIDE_BOTTOM)
         {
-            ptShow.y = _rcSelection.bottom;
+            ptShow.y = prcBox->bottom;
         }
         else
         {
-            ptShow.y = _rcSelection.top;
+            ptShow.y = prcBox->top;
         }
 
         ClientToScreen(_hwnd, &ptShow);
