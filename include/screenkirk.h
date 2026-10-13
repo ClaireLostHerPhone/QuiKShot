@@ -242,6 +242,20 @@ DECLARE_INTERFACE_IID_(IScreenshotEditorObjectHistoryManager, IUnknown, "{F5F3E4
 DEFINE_GUID(IID_IScreenshotEditorObjectHistoryManager, 
     0xf5f3e4fe, 0xba5e, 0x4b6a, 0x84, 0x55, 0x3a, 0xd5, 0x6a, 0x16, 0x79, 0x93);
 
+//
+// Tool properties
+//
+
+// Label
+// {0F98AC59-5716-48CA-98CD-38DF9B530310}
+DEFINE_GUID(TOOLPROPID_LABEL, 
+    0xf98ac59, 0x5716, 0x48ca, 0x98, 0xcd, 0x38, 0xdf, 0x9b, 0x53, 0x3, 0x10);
+
+// Color property
+// {0F98AC59-5716-48CA-98CD-38DF9B530311}
+DEFINE_GUID(TOOLPROPID_COLOR, 
+    0xf98ac59, 0x5716, 0x48ca, 0x98, 0xcd, 0x38, 0xdf, 0x9b, 0x53, 0x3, 0x11);
+
 //@Begin IScreenshotEditorTool::GetFlags() flags
 #define SSETF_DRAWSELECTION (1 << 0)
 //@End IScreenshotEditorTool::GetFlags() flags

@@ -166,6 +166,44 @@ public:
 };
 
 //
+// Toolbar for properties for the current tool.
+//
+class CEditorToolProperties : public CWindow<CEditorToolProperties>
+{
+    DEFINE_WINDOW_CLASS("screenkirk_EditorToolProperties");
+
+private:
+    class CScreenshotEditorWindow *_pEditor;
+    HWND _hwndToolbar;
+    CDynamicArray<HBITMAP> _vhbmIcons;
+    UINT _uDpi;
+
+protected:
+    LRESULT v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) override;
+    LRESULT _OnCreate(CREATESTRUCT *pcs);
+    LRESULT _OnDestroy();
+    LRESULT _OnCommand(WPARAM wParam, LPARAM lParam);
+    LRESULT _OnNotify(NMHDR *pnmh, WPARAM wParam, bool *pfHandled);
+
+public:
+    static HRESULT RegisterWindowClass();
+
+    /**
+     * Creates the editor toolbar.
+     */
+    static CEditorToolProperties *Create(class CScreenshotEditorWindow *pEditor, DWORD dwExStyle, DWORD dwStyle, int x, int y, int cx, int cy, HWND hwndParent);
+
+    CEditorToolProperties()
+        : _pEditor(nullptr)
+        , _hwndToolbar(nullptr)
+        , _uDpi(96)
+    {
+    }
+
+    inline class CScreenshotEditorWindow *GetOwnerEditor() { return _pEditor; }
+};
+
+//
 // Editor floating toolbar (used in fullscreen mode)
 //
 class CEditorFloatingToolbar : public CWindow<CEditorFloatingToolbar>
@@ -173,14 +211,22 @@ class CEditorFloatingToolbar : public CWindow<CEditorFloatingToolbar>
     DEFINE_WINDOW_CLASS("screenkirk_EditorFloatingToolbar");
 
 private:
+    struct CreateData
+    {
+        CEditorToolbar *pToolbar;
+        CEditorToolProperties *pToolProps;
+    };
+
     class CScreenshotEditorWindow *_pEditor;
     CEditorToolbar *_pToolbarTools;
     CEditorActionsStrip *_pActionStrip;
+    CEditorToolProperties *_pToolProps;
 
 protected:
     LRESULT v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) override;
 
     HRESULT _OnCreate();
+    HRESULT _DoLayout();
 
 public:
     static HRESULT RegisterWindowClass();
@@ -188,12 +234,13 @@ public:
     /**
      * Creates the floating toolbar.
      */
-    static CEditorFloatingToolbar *Create(CEditorToolbar *pToolbar);
+    static CEditorFloatingToolbar *Create(CEditorToolbar *pToolbar, CEditorToolProperties *pToolProps);
 
 	CEditorFloatingToolbar()
 		: _pEditor(nullptr)
 		, _pToolbarTools(nullptr)
 		, _pActionStrip(nullptr)
+        , _pToolProps(nullptr)
 	{
 	}
 };
@@ -482,6 +529,7 @@ private:
     CScreenshotEditorRendererGDI *_pRenderer;
     CEditHistoryManager *_pHistoryMgr;
     CEditorToolbar *_pToolbar;
+    CEditorToolProperties *_pToolProps;
     CEditorFloatingToolbar *_pFloatingToolbar;
     IScreenshotEditorObject *_pSelectedObject;
     IScreenshotEditorObject *_pHoveredObj;
@@ -586,6 +634,7 @@ public:
 		: _pScreenshotCtx(nullptr)
 		, _pRenderer(nullptr)
         , _pToolbar(nullptr)
+        , _pToolProps(nullptr)
 		, _pFloatingToolbar(nullptr)
         , _pSelectedObject(nullptr)
         , _pHoveredObj(nullptr)

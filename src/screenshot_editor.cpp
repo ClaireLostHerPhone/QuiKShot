@@ -910,6 +910,194 @@ CEditorActionsStrip *CEditorActionsStrip::Create(CScreenshotEditorWindow *pEdito
 }
 
 //
+// CEditorToolProperties
+//
+
+LRESULT CEditorToolProperties::v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    switch (uMsg)
+    {
+        case WM_CREATE:
+        {
+            CREATESTRUCT *pcs = (CREATESTRUCT *)lParam;
+            _pEditor = (CScreenshotEditorWindow *)pcs->lpCreateParams;
+            return _OnCreate(pcs);
+        }
+
+        case WM_DESTROY:
+        {
+            return _OnDestroy();
+        }
+
+        case WM_SIZE:
+        {
+            int iWidth = LOWORD(lParam);
+            int iHeight = HIWORD(lParam);
+
+            SetWindowPos(_hwndToolbar, nullptr, 0, 0, iWidth, iHeight, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+
+            break;
+        }
+
+        // Key input should pass through to the editor if the toolbar is
+        // activated.
+        case WM_KEYDOWN:
+        case WM_KEYUP:
+        {
+            PostMessage(_pEditor->GetHWND(), uMsg, wParam, lParam);
+            break;
+        }
+
+        case WM_COMMAND:
+        {
+            return _OnCommand(wParam, lParam);
+        }
+
+        case WM_NOTIFY:
+        {
+            NMHDR *pnmh = (NMHDR *)lParam;
+            bool fHandled = false;
+            LRESULT lr = _OnNotify(pnmh, wParam, &fHandled);
+            if (fHandled)
+                return lr;
+        }
+
+        default:
+        {
+            if (_hwndToolbar && uMsg >= WM_USER)
+            {
+                return SendMessage(_hwndToolbar, uMsg, wParam, lParam);
+            }
+        }
+    }
+
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+}
+
+LRESULT CEditorToolProperties::_OnCreate(CREATESTRUCT *pcs)
+{
+    _hwndToolbar = CreateWindowEx(
+        0,
+        TOOLBARCLASSNAME,
+        nullptr,
+        WS_VISIBLE | WS_CHILD | TBSTYLE_WRAPABLE | TBSTYLE_TOOLTIPS | TBSTYLE_LIST | TBSTYLE_FLAT,
+        0, 0,
+        0, 0,
+        _hwnd,
+        nullptr,
+        g_hinst,
+        nullptr
+    );
+
+    if (!_hwndToolbar)
+    {
+        return -1;
+    }
+
+    SendMessage(_hwndToolbar, TB_BUTTONSTRUCTSIZE, (WPARAM)sizeof(TBBUTTON), 0);
+
+    TBBUTTON rgtbButtons[1] = { 0 };
+
+    int i = 0;
+    rgtbButtons[i].idCommand = 0;
+    rgtbButtons[i].iString = (INT_PTR)TEXT("Tool properties will be shown here");
+    rgtbButtons[i].fsState = TBSTATE_ENABLED;
+    rgtbButtons[i].fsStyle = BTNS_SHOWTEXT;
+    rgtbButtons[i].iBitmap = 0;
+
+    SendMessage(_hwndToolbar, TB_ADDBUTTONS, 1, (LPARAM)rgtbButtons);
+
+    return DefWindowProc(_hwnd, WM_CREATE, 0, (LPARAM)pcs);
+}
+
+LRESULT CEditorToolProperties::_OnDestroy()
+{
+    FOR_EACH_DYNARR(HBITMAP hbm, _vhbmIcons)
+    {
+        DeleteObject(hbm);
+    }
+
+    return DefWindowProc(_hwnd, WM_DESTROY, 0, 0);
+}
+
+LRESULT CEditorToolProperties::_OnCommand(WPARAM wParam, LPARAM lParam)
+{
+    //WPARAM toolRequested = LOWORD(wParam);
+
+    //if (toolRequested == SSET_SHOWCURSOR)
+    //{
+    //    // This tool does not receive selection.
+    //    if (!SendMessage(_hwndToolbar, TB_ISBUTTONCHECKED, SSET_SHOWCURSOR, 0))
+    //    {
+    //        SendMessage(_pEditor->GetHWND(), CScreenshotEditorWindow::WM_SSE_HIDECURSOR, 0, 0);
+    //    }
+    //    else
+    //    {
+    //        SendMessage(_pEditor->GetHWND(), CScreenshotEditorWindow::WM_SSE_SHOWCURSOR, 0, 0);
+    //    }
+    //}
+    //else
+    //{
+    //    SendMessage(_pEditor->GetHWND(), CScreenshotEditorWindow::WM_SSE_CHANGETOOL, toolRequested, 0);
+    //}
+
+    return 0;
+}
+
+LRESULT CEditorToolProperties::_OnNotify(NMHDR *pnmh, WPARAM wParam, bool *pfHandled)
+{
+    //if (pnmh->code == TTN_GETDISPINFO)
+    //{
+    //    NMTTDISPINFO *pDispInfo = (NMTTDISPINFO *)pnmh;
+
+    //    TBBUTTONINFO tbbi = { sizeof(tbbi) };
+    //    tbbi.dwMask = TBIF_LPARAM;
+    //    if (SendMessage(_hwndToolbar, TB_GETBUTTONINFO, pDispInfo->hdr.idFrom, (LPARAM)&tbbi) > -1)
+    //    {
+    //        pDispInfo->lpszText = (TCHAR *)tbbi.lParam;
+    //        return 0;
+    //    }
+    //}
+
+    return 0;
+}
+
+// static
+HRESULT CEditorToolProperties::RegisterWindowClass()
+{
+    WNDCLASS cls = { 0 };
+    cls.hInstance = g_hinst;
+    cls.hbrBackground = nullptr;
+    cls.hCursor = nullptr;
+    cls.hIcon = nullptr;
+
+    return CWindow::RegisterWindowClass(&cls);
+}
+
+// static
+CEditorToolProperties *CEditorToolProperties::Create(CScreenshotEditorWindow *pEditor, DWORD dwExStyle, DWORD dwStyle, int x, int y, int cx, int cy, HWND hwndParent)
+{
+    if (FAILED(RegisterWindowClass()))
+    {
+        return nullptr;
+    }
+
+    CEditorToolProperties *pWnd = CWindow::Create(
+        dwExStyle,
+        nullptr,
+        dwStyle,
+        x, y,
+        cx, cy,
+        hwndParent,
+        nullptr,
+        g_hinst,
+        pEditor
+    );
+
+    return pWnd;
+}
+
+//
 // CEditorFloatingToolbar
 //
 
@@ -920,7 +1108,9 @@ LRESULT CEditorFloatingToolbar::v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, L
         case WM_CREATE:
         {
             CREATESTRUCT *pcs = (CREATESTRUCT *)lParam;
-            _pToolbarTools = (CEditorToolbar *)pcs->lpCreateParams;
+            CreateData cd = *(CreateData *)pcs->lpCreateParams;
+            _pToolbarTools = cd.pToolbar;
+            _pToolProps = cd.pToolProps;
             _pEditor = _pToolbarTools->GetOwnerEditor();
 
             if (FAILED(_OnCreate()))
@@ -969,11 +1159,26 @@ HRESULT CEditorFloatingToolbar::_OnCreate()
 
     SetParent(_pToolbarTools->GetHWND(), _hwnd);
     SetWindowPos(_pToolbarTools->GetHWND(), nullptr, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOZORDER);
+
+    SetParent(_pToolProps->GetHWND(), _hwnd);
+    SetWindowPos(_pToolProps->GetHWND(), nullptr, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOZORDER);
+
     _pActionStrip = CEditorActionsStrip::Create(_pEditor, 0, WS_CHILD, 0, 0, 0, 0, _hwnd);
 
+    ASSERT_KEEP(SUCCEEDED(_DoLayout()));
+
+    ShowWindow(_pToolbarTools->GetHWND(), SW_SHOW);
+    ShowWindow(_pActionStrip->GetHWND(), SW_SHOW);
+    ShowWindow(_pToolProps->GetHWND(), SW_SHOW);
+
+    return S_OK;
+}
+
+HRESULT CEditorFloatingToolbar::_DoLayout()
+{
     SIZE sizeActionsIdeal;
     SendMessage(_pToolbarTools->GetHWND(), TB_GETMAXSIZE, FALSE, (LPARAM)&sizeActionsIdeal);
-    
+
     RECT rcActions;
     rcActions.left = 0;
     rcActions.top = 0;
@@ -1021,9 +1226,28 @@ HRESULT CEditorFloatingToolbar::_OnCreate()
 
     SendMessage(_pToolbarTools->GetHWND(), TB_AUTOSIZE, 0, 0);
 
+    SendMessage(_pToolProps->GetHWND(), TB_AUTOSIZE, 0, 0);
+    RECT rcProps = { 0 };
+
+    for (int i = 0, j = SendMessage(_pToolProps->GetHWND(), TB_BUTTONCOUNT, 0, 0); i < j; i++)
+    {
+        RECT rcItem;
+        SendMessage(_pToolProps->GetHWND(), TB_GETITEMRECT, i, (LPARAM)&rcItem);
+
+        if (RECTHEIGHT(rcProps) < RECTHEIGHT(rcItem))
+        {
+            rcProps.bottom = rcProps.top + RECTHEIGHT(rcItem);
+        }
+
+        rcProps.right += RECTWIDTH(rcItem);
+    }
+
     RECT rcTools;
     GetWindowRect(_pToolbarTools->GetHWND(), &rcTools);
-    MapWindowPoints(HWND_DESKTOP, GetParent(_pToolbarTools->GetHWND()), (LPPOINT)&rcTools, 2);
+    MapWindowRect(HWND_DESKTOP, GetParent(_pToolbarTools->GetHWND()), &rcTools);
+
+    // Move the toolbox to appear below the properties toolbar:
+    OffsetRect(&rcTools, 0, rcProps.bottom);
 
     // Move the actions strip to appear below the toolbox:
     OffsetRect(&rcActions, 0, rcTools.bottom);
@@ -1034,6 +1258,7 @@ HRESULT CEditorFloatingToolbar::_OnCreate()
 
     RECT rcUnion;
     UnionRect(&rcUnion, &rcTools, &rcActions);
+    UnionRect(&rcUnion, &rcUnion, &rcProps);
 
     DWORD dwStyle = GetWindowLong(_hwnd, GWL_STYLE);
     DWORD dwExStyle = GetWindowLong(_hwnd, GWL_EXSTYLE);
@@ -1058,6 +1283,13 @@ HRESULT CEditorFloatingToolbar::_OnCreate()
         RECTWIDTH(rcAdjusted), RECTHEIGHT(rcTools),
         SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_FRAMECHANGED
     );
+    SetWindowPos(
+        _pToolProps->GetHWND(),
+        _pToolbarTools->GetHWND(),
+        rcProps.left, rcProps.top,
+        RECTWIDTH(rcAdjusted), RECTHEIGHT(rcProps),
+        SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_FRAMECHANGED
+    );
 
     SetWindowPos(
         _hwnd,
@@ -1066,9 +1298,6 @@ HRESULT CEditorFloatingToolbar::_OnCreate()
         RECTWIDTH(rcAdjusted), RECTHEIGHT(rcAdjusted),
         SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOMOVE | SWP_FRAMECHANGED
     );
-
-    ShowWindow(_pToolbarTools->GetHWND(), SW_SHOW);
-    ShowWindow(_pActionStrip->GetHWND(), SW_SHOW);
 
     return S_OK;
 }
@@ -1086,7 +1315,7 @@ HRESULT CEditorFloatingToolbar::RegisterWindowClass()
 }
 
 // static
-CEditorFloatingToolbar *CEditorFloatingToolbar::Create(CEditorToolbar *pToolbar)
+CEditorFloatingToolbar *CEditorFloatingToolbar::Create(CEditorToolbar *pToolbar, CEditorToolProperties *pToolProps)
 {
     if (FAILED(RegisterWindowClass()))
     {
@@ -1103,6 +1332,10 @@ CEditorFloatingToolbar *CEditorFloatingToolbar::Create(CEditorToolbar *pToolbar)
         dwExStyle &= ~WS_EX_PALETTEWINDOW;
     }
 
+    CreateData cd;
+    cd.pToolbar = pToolbar;
+    cd.pToolProps = pToolProps;
+
     CEditorFloatingToolbar *pWnd = CWindow::Create(
         dwExStyle,
         TEXT("Tools"),
@@ -1112,7 +1345,7 @@ CEditorFloatingToolbar *CEditorFloatingToolbar::Create(CEditorToolbar *pToolbar)
         nullptr,
         nullptr,
         g_hinst,
-        pToolbar
+        &cd
     );
 
     return pWnd;
@@ -3061,6 +3294,11 @@ HRESULT CScreenshotEditorWindow::_EnsureToolbar()
         _pToolbar = CEditorToolbar::Create(this, 0, WS_CHILD, 0, 0, 0, 0, _hwnd);
     }
 
+    if (!_pToolProps)
+    {
+        _pToolProps = CEditorToolProperties::Create(this, 0, WS_CHILD, 0, 0, 0, 0, _hwnd);
+    }
+
     return _pToolbar ? S_OK : E_FAIL;
 }
 
@@ -3071,7 +3309,7 @@ void CScreenshotEditorWindow::_ShowFloatingToolbar()
         // If we don't have a floating toolbar instance yet, then we will create one:
         if (!_pFloatingToolbar)
         {
-            _pFloatingToolbar = CEditorFloatingToolbar::Create(_pToolbar);
+            _pFloatingToolbar = CEditorFloatingToolbar::Create(_pToolbar, _pToolProps);
             _pToolbar->OnToolChanged(_tool);
         }
 
