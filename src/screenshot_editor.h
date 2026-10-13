@@ -8,7 +8,7 @@ enum ScreenshotEditorTool
 {
     SSET_SELECT,
     SSET_DRAG,
-    SSET_SHOWCURSOR,
+    SSET_SHOWCURSOR, // Not really a tool.
     SSET_ILLEGAL, // Used as a fallback if an extension tool fails.
 
     SSET_EXTENSIONFIRST, // Used for extensions. Not really currently implemented.

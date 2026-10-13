@@ -1498,8 +1498,10 @@ HRESULT CScreenshotEditorRendererGDI::RemoveRenderObject(IScreenshotEditorObject
     int idxRenderObj;
     if (SUCCEEDED(_FindRenderObjectFromInterfaceObject(pObj, &pro, &idxRenderObj)))
     {
-        RECT rcVisual = { 0 };
-        ASSERT_KEEP(SUCCEEDED(GetAdjustedObjectVisualRect(pro->_pObj, &rcVisual)));
+        if (pro == _pRenderObjSel)
+        {
+            ChangeSelectedObject(nullptr);
+        }
 
         if (pro->_pRendererGdi)
             pro->_pRendererGdi->Release();
@@ -1510,7 +1512,7 @@ HRESULT CScreenshotEditorRendererGDI::RemoveRenderObject(IScreenshotEditorObject
 
         _vRenderObjs.Remove(idxRenderObj);
         _bmp.fAnyObjectDirty = true;
-        InvalidateRect(_hwndRenderTarget, &rcVisual, FALSE);
+        InvalidateRect(_hwndRenderTarget, &pro->_rcLatestVisual, FALSE);
     }
 
     return E_NOT_SET;
