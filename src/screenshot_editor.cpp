@@ -9,6 +9,20 @@
 #include "cursor.h"
 #include "cfgmgr.h"
 
+static HRESULT GetAdjustedObjectVisualRect(IScreenshotEditorObject *pObj, RECT *prc)
+{
+    RECT rcLogical;
+    RECT rcVisual;
+    if (SUCCEEDED(pObj->GetLogicalRect(&rcLogical))
+        && SUCCEEDED(pObj->GetVisualRect(&rcVisual)))
+    {
+        OffsetRect(&rcVisual, rcLogical.left, rcLogical.top);
+        *prc = rcVisual;
+        return S_OK;
+    }
+    return E_FAIL;
+}
+
 //
 // CEditorToolbar
 //
@@ -1229,13 +1243,9 @@ HRESULT CScreenshotEditorRendererGDI::Paint(HDC hdc, RECT *prcPaint)
         {
             CRenderObject *pRenderObject = &_vRenderObjs[i];
 
-            RECT rcLogical;
             RECT rcVisual;
-            if (SUCCEEDED(pRenderObject->_pObj->GetLogicalRect(&rcLogical))
-                && SUCCEEDED(pRenderObject->_pObj->GetVisualRect(&rcVisual)))
+            if (SUCCEEDED(GetAdjustedObjectVisualRect(pRenderObject->_pObj, &rcVisual)))
             {
-                OffsetRect(&rcVisual, rcLogical.left, rcLogical.top);
-
                 RECT rcTemp;
                 if (!IntersectRect(&rcTemp, &rcVisual, prcPaint))
                 {
@@ -1488,12 +1498,8 @@ HRESULT CScreenshotEditorRendererGDI::RemoveRenderObject(IScreenshotEditorObject
     int idxRenderObj;
     if (SUCCEEDED(_FindRenderObjectFromInterfaceObject(pObj, &pro, &idxRenderObj)))
     {
-        RECT rcLogical = { 0 };
-        ASSERT_KEEP(SUCCEEDED(pObj->GetLogicalRect(&rcLogical)));
-
         RECT rcVisual = { 0 };
-        ASSERT_KEEP(SUCCEEDED(pObj->GetVisualRect(&rcVisual)));
-        OffsetRect(&rcVisual, rcLogical.left, rcLogical.top);
+        ASSERT_KEEP(SUCCEEDED(GetAdjustedObjectVisualRect(pro->_pObj, &rcVisual)));
 
         if (pro->_pRendererGdi)
             pro->_pRendererGdi->Release();
@@ -1512,29 +1518,23 @@ HRESULT CScreenshotEditorRendererGDI::RemoveRenderObject(IScreenshotEditorObject
 
 HRESULT CScreenshotEditorRendererGDI::InvalidateRenderObject(IScreenshotEditorObject *pObj)
 {
-    RECT rcLogical = { 0 };
-    if (SUCCEEDED(pObj->GetLogicalRect(&rcLogical)))
+    RECT rcVisual = { 0 };
+    if (SUCCEEDED(GetAdjustedObjectVisualRect(pObj, &rcVisual)))
     {
-        RECT rcVisual = { 0 };
-        if (SUCCEEDED(pObj->GetVisualRect(&rcVisual)))
+        CRenderObject *pro = nullptr;
+        if (SUCCEEDED(_FindRenderObjectFromInterfaceObject(pObj, &pro, nullptr)))
         {
-            OffsetRect(&rcVisual, rcLogical.left, rcLogical.top);
+            RECT rcUnion;
+            UnionRect(&rcUnion, &rcVisual, &pro->_rcLatestVisual);
 
-            CRenderObject *pro = nullptr;
-            if (SUCCEEDED(_FindRenderObjectFromInterfaceObject(pObj, &pro, nullptr)))
+            if (pro == _pRenderObjSel)
             {
-                RECT rcUnion;
-                UnionRect(&rcUnion, &rcVisual, &pro->_rcLatestVisual);
-
-                if (pro == _pRenderObjSel)
-                {
-                    InflateRect(&rcUnion, c_iRadiusSelHelper / 2, c_iRadiusSelHelper / 2);
-                }
-
-                _bmp.fAnyObjectDirty = true;
-                InvalidateRect(_hwndRenderTarget, &rcUnion, FALSE);
-                return S_OK;
+                InflateRect(&rcUnion, c_iRadiusSelHelper / 2, c_iRadiusSelHelper / 2);
             }
+
+            _bmp.fAnyObjectDirty = true;
+            InvalidateRect(_hwndRenderTarget, &rcUnion, FALSE);
+            return S_OK;
         }
     }
 
