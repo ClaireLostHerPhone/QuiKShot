@@ -2690,9 +2690,15 @@ LRESULT CScreenshotEditorWindow::_OnMouseLButtonUp(int x, int y, WPARAM flags)
     _fIsSelectingRegion = false;
     _ptSelectionOrigin.x = _ptSelectionOrigin.y = 0;
 
-    if (_tool == SSET_SELECT || _tool == SSET_DRAG)
+    if (_tool == SSET_SELECT || (_tool == SSET_DRAG && !_pSelectedObject))
     {
         _pHistoryMgr->PushSelectRegion(&_rcSelection);
+    }
+    else if (_tool == SSET_DRAG && _pSelectedObject)
+    {
+        RECT rcObjCur;
+        _pSelectedObject->GetLogicalRect(&rcObjCur);
+        _pHistoryMgr->PushObjectMove(_pSelectedObject, &rcObjCur, &_rcDragBegin);
     }
     else if (_IsExtensionTool())
     {
@@ -2882,7 +2888,11 @@ HRESULT CScreenshotEditorWindow::_ApplyHistoryState(CEditHistoryManager::EditHis
     {
         hr = _RemoveObject(pehd->data.pObject);
     }
-    // Not handled yet: OBJECTMOVE, OBJECT (unique)
+    else if (pehd->idAction == CEditHistoryManager::EHID_OBJECTMOVE)
+    {
+        hr = pehd->data.objectMove.pObject->Move(&pehd->data.objectMove.rcNew);
+    }
+    // Not handled yet: OBJECT (unique)
 
     _pHistoryMgr->Unlock();
     return hr;
@@ -2910,6 +2920,10 @@ HRESULT CScreenshotEditorWindow::_Undo()
             {
                 // Add the object if it was removed.
                 InsertObject(ehdCur.data.pObject);
+            }
+            else if (ehdCur.idAction == CEditHistoryManager::EHID_OBJECTMOVE)
+            {
+                ehdCur.data.objectMove.pObject->Move(&ehdCur.data.objectMove.rcOld);
             }
 
             // Apply the previous case:
@@ -3854,6 +3868,7 @@ HRESULT CEditHistoryManager::_DestroyEntry(int idxEntry)
     if (pEditorObj)
     {
 #ifdef _DEBUG
+        if (ehd.idAction == EHID_OBJECTCREATE)
         {
             HWND hwndEditor = FindWindow(CScreenshotEditorWindow::GetWindowClass(), nullptr);
             CScreenshotEditorWindow *pEditor = (CScreenshotEditorWindow *)GetWindowLongPtr(hwndEditor, 0);
