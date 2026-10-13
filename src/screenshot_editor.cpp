@@ -1174,10 +1174,10 @@ HRESULT CScreenshotEditorRendererGDI::Initialize()
 HRESULT CScreenshotEditorRendererGDI::Paint(HDC hdc, RECT *prcPaint)
 {
     // There is currently no good condition to avoid using the backbuffer under.
-    bool fUseBackbuffer = true;
+    bool fUseBackbuffer = !_bmp.fRender;
 
     HDC hdcScreenshot = CreateCompatibleDC(hdc);
-    HGDIOBJ hObjOldSS = (HGDIOBJ)SelectObject(hdcScreenshot, _hbmScreenshotDimmed);
+    HGDIOBJ hObjOldSS = (HGDIOBJ)SelectObject(hdcScreenshot, _bmp.fRender ? _hbmScreenshotLight : _hbmScreenshotDimmed);
 
     HDC hdcBackbuffer = nullptr;
     HBITMAP hbmBackbuffer = nullptr;
@@ -1202,9 +1202,21 @@ HRESULT CScreenshotEditorRendererGDI::Paint(HDC hdc, RECT *prcPaint)
     else
     {
         hdcBackbuffer = hdcScreenshot;
+
+        if (_bmp.fRender)
+        {
+            BitBlt(
+                hdc,
+                0, 0,
+                RECTWIDTH(*prcPaint), RECTHEIGHT(*prcPaint),
+                hdcScreenshot,
+                prcPaint->left, prcPaint->top,
+                SRCCOPY
+            );
+        }
     }
 
-    if (_bmp.fHasAnySelectionMade)
+    if (!_bmp.fRender && _bmp.fHasAnySelectionMade)
     {
         HDC hdcSelection = fUseBackbuffer
             ? hdcBackbuffer
@@ -1258,7 +1270,7 @@ HRESULT CScreenshotEditorRendererGDI::Paint(HDC hdc, RECT *prcPaint)
         }
     }
     
-    if (_bmp.fHasAnySelectionMade || _bmp.fPreviewSelection)
+    if (!_bmp.fRender && _bmp.fHasAnySelectionMade || _bmp.fPreviewSelection)
     {
         HDC hdcSelection = fUseBackbuffer
             ? hdcBackbuffer
@@ -1275,17 +1287,17 @@ HRESULT CScreenshotEditorRendererGDI::Paint(HDC hdc, RECT *prcPaint)
         }
     }
 
-    BitBlt(
-        hdc,
-        prcPaint->left, prcPaint->top,
-        RECTWIDTH(*prcPaint), RECTHEIGHT(*prcPaint),
-        hdcBackbuffer,
-        prcPaint->left, prcPaint->top,
-        SRCCOPY
-    );
-
     if (fUseBackbuffer)
     {
+        BitBlt(
+            hdc,
+            prcPaint->left, prcPaint->top,
+            RECTWIDTH(*prcPaint), RECTHEIGHT(*prcPaint),
+            hdcBackbuffer,
+            prcPaint->left, prcPaint->top,
+            SRCCOPY
+        );
+
         SelectObject(hdcBackbuffer, hObjOldBB);
         DeleteObject(hbmBackbuffer);
         DeleteDC(hdcBackbuffer);
@@ -1302,6 +1314,31 @@ HRESULT CScreenshotEditorRendererGDI::Paint(HDC hdc, RECT *prcPaint)
     _bmp.fSelectionDirtyWest = false;
     _bmp.fAnyObjectDirty = false;
 
+    return S_OK;
+}
+
+/**
+ * Renders the scene to a bitmap.
+ */
+HRESULT CScreenshotEditorRendererGDI::RenderToBitmap(OUT HBITMAP *phbmOut)
+{
+    _bmp.fRender = true;
+    HDC hdcDesktop = GetDC(HWND_DESKTOP);
+    HDC hdc = CreateCompatibleDC(hdcDesktop);
+
+    *phbmOut = CreateCompatibleBitmap(hdcDesktop, _pScreenshotCtx->_sizeDesktop.cx, _pScreenshotCtx->_sizeDesktop.cy);
+    HGDIOBJ hBmpOld = SelectObject(hdc, *phbmOut);
+
+    RECT rcPaint = { 0 };
+    rcPaint.right = _pScreenshotCtx->_sizeDesktop.cx;
+    rcPaint.bottom = _pScreenshotCtx->_sizeDesktop.cy;
+    Paint(hdc, &rcPaint);
+
+    SelectObject(hdc, hBmpOld);
+
+    DeleteDC(hdc);
+    ReleaseDC(HWND_DESKTOP, hdcDesktop);
+    _bmp.fRender = false;
     return S_OK;
 }
 
@@ -2780,7 +2817,7 @@ LRESULT CScreenshotEditorWindow::_OnMouseRButtonUp(int x, int y, WPARAM flags)
     return 0;
 }
 
-HRESULT CScreenshotEditorWindow::_ApplyCrop()
+HRESULT CScreenshotEditorWindow::_ApplyChangesToImage()
 {
     if (!_fHasAnySelectionMade)
     {
@@ -2788,6 +2825,13 @@ HRESULT CScreenshotEditorWindow::_ApplyCrop()
         _rcSelection.right = _pScreenshotCtx->_sizeDesktop.cx;
         _rcSelection.bottom = _pScreenshotCtx->_sizeDesktop.cy;
     }
+
+    // Initialize the modification buffer with the rendered scene of the image. If we don't
+    // do this, then objects placed in the screenshot editor will not be visible in the final
+    // image.
+    if (_pScreenshotCtx->_hbmModified)
+        DeleteObject(_pScreenshotCtx->_hbmModified);
+    _pRenderer->RenderToBitmap(&_pScreenshotCtx->_hbmModified);
 
     if (SUCCEEDED(_pScreenshotCtx->Crop(&_rcSelection)))
     {
@@ -2847,6 +2891,8 @@ HRESULT CScreenshotEditorWindow::_LoadExtensionTools()
                         DBGPRINT(TEXT("Failed to get tool set from extension \"%s\""),
                             pLoadedExt->_pszName ? pLoadedExt->_pszName : pLoadedExt->_pszDllName);
                     }
+
+                    pExt->Release();
                 }
                 else
                 {
@@ -2855,6 +2901,8 @@ HRESULT CScreenshotEditorWindow::_LoadExtensionTools()
             }
             while (SUCCEEDED(pExtIterator->GetNext(&pLoadedExt)));
         }
+
+        pExtIterator->Close();
     }
     else
     {
@@ -3630,7 +3678,7 @@ bool CScreenshotEditorWindow::IsCursorShown()
 
 HRESULT CScreenshotEditorWindow::CopyToClipboardAndAccept()
 {
-    if (SUCCEEDED(_ApplyCrop()))
+    if (SUCCEEDED(_ApplyChangesToImage()))
     {
         if (SUCCEEDED(_pScreenshotCtx->CopyToClipboard()))
         {
@@ -3653,7 +3701,7 @@ HRESULT CScreenshotEditorWindow::CopyToClipboardAndAccept()
 
 HRESULT CScreenshotEditorWindow::SaveImageToFileAndAccept()
 {
-    if (SUCCEEDED(_ApplyCrop()))
+    if (SUCCEEDED(_ApplyChangesToImage()))
     {
         HRESULT hr = _pScreenshotCtx->SaveToFile();
         if (SUCCEEDED(hr))

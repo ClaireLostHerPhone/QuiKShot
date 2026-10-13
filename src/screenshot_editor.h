@@ -262,6 +262,7 @@ class CScreenshotEditorRendererGDI
         bool fSelectionDirtyWest : 1;
         bool fEntireFrameDirty : 1;
         bool fCursorVisible : 1;
+        bool fRender : 1;
     } _bmp;
 
     HRESULT _PaintSelectionRectangle(HDC hdc, RECT *prc, bool fUseMarquee);
@@ -313,6 +314,7 @@ public:
 
     HRESULT Initialize();
     HRESULT Paint(HDC hdc, RECT *prcPaint = nullptr);
+    HRESULT RenderToBitmap(OUT HBITMAP *phbmOut);
     HRESULT UpdateSelection(RECT *prcNew);
     HRESULT PreviewSelection(RECT *prcNew);
     HRESULT UpdateSizingHelpersVisibility(bool fVisible);
@@ -511,7 +513,7 @@ protected:
     LRESULT _OnMouseRButtonDown(int x, int y, WPARAM flags);
     LRESULT _OnMouseRButtonUp(int x, int y, WPARAM flags);
 
-    HRESULT _ApplyCrop();
+    HRESULT _ApplyChangesToImage();
 
     HRESULT _LoadExtensionTools();
 
