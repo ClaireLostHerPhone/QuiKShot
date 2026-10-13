@@ -436,6 +436,7 @@ public:
     STDMETHODIMP_(BOOL) IsVisualDirty() override { return false; }
     STDMETHODIMP Move(RECT *prcNew) override { _rcPosLogical = *prcNew; return S_OK; }
     STDMETHODIMP CreateRenderer(const REFIID riid, OUT IScreenshotEditorObjectRenderer **ppRendererOut) override { return E_NOINTERFACE; }
+    STDMETHODIMP CreateHistoryManager(const REFIID riid, OUT IScreenshotEditorObjectHistoryManager **ppHistoryManagerOut) override { return E_NOTIMPL; }
     //@End IScreenshotRendererObject
 
     CScreenshotEditorSelectionTemplateObject()
