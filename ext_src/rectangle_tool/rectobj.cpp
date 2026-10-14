@@ -104,6 +104,11 @@ STDMETHODIMP CRectangleObject::CreateRenderer(const REFIID riid, OUT IScreenshot
     return E_NOINTERFACE;
 }
 
+STDMETHODIMP CRectangleObject::CreateHistoryManager(const REFIID riid, OUT IScreenshotEditorObjectHistoryManager **ppHistoryManagerOut)
+{
+    return E_NOTIMPL;
+}
+
 STDMETHODIMP CRectangleObject::Paint()
 {
     // Test color (pure red)

@@ -454,6 +454,98 @@ public:
     HRESULT Unlock();
 };
 
+class CScreenshotEditorToolPropertyBase
+    : public IScreenshotEditorToolProperty
+{
+    TCHAR _szLabel[MAX_PATH];
+    IScreenshotEditorTool *_pTool;
+
+public:
+    IMPLEMENT_IUNKNOWN;
+
+    //@Begin IObjectWithSite
+    STDMETHODIMP GetSite(REFIID riid, void **ppvSite) override;
+    STDMETHODIMP SetSite(IUnknown *pUnkSite) override;
+    //@End IObjectWithSite
+
+    //@Begin IScreenshotEditorToolProperty
+    STDMETHODIMP GetLabel(OUT TCHAR **ppszOut) override;
+    STDMETHOD(GetIcon)(OUT HICON *phIcon) PURE;
+    STDMETHOD(OnClick)() PURE;
+    STDMETHOD(CreateMenuItem)(IN HMENU hMenu) PURE;
+    STDMETHOD(OnClickMenuItem)() PURE;
+    STDMETHOD(MeasureToolbar)(IN RECT *prcToolbar, IN OUT RECT *prcProperty) PURE;
+    STDMETHOD(GetValue)(VARIANT *pvar) PURE;
+    STDMETHOD(GetDefaultValue)(VARIANT *pvar) PURE;
+    //@End IScreenshotEditorToolProperty
+
+    CScreenshotEditorToolPropertyBase(TCHAR *pszLabel)
+        : _pTool(nullptr)
+    {
+        _tcscpy_s(_szLabel, pszLabel);
+    }
+};
+
+class CScreenshotEditorToolPropertyLabel
+    : public CScreenshotEditorToolPropertyBase
+{
+public:
+    //@Begin IScreenshotEditorToolProperty
+    STDMETHODIMP GetIcon(OUT HICON *phIcon) override { return E_NOTIMPL; }
+    STDMETHODIMP OnClick() override;
+    STDMETHODIMP CreateMenuItem(IN HMENU hMenu) override;
+    STDMETHODIMP OnClickMenuItem() override;
+    STDMETHODIMP MeasureToolbar(IN RECT *prcToolbar, IN OUT RECT *prcProperty) override;
+    STDMETHODIMP GetValue(VARIANT *pvar) override;
+    STDMETHODIMP GetDefaultValue(VARIANT *pvar) override;
+    //@End IScreenshotEditorToolProperty
+
+    CScreenshotEditorToolPropertyLabel(TCHAR *pszLabel)
+        : CScreenshotEditorToolPropertyBase(pszLabel)
+    {
+    }
+};
+
+class CScreenshotEditorToolPropertyColor
+    : public CScreenshotEditorToolPropertyBase
+{
+public:
+    //@Begin IScreenshotEditorToolProperty
+    STDMETHODIMP GetIcon(OUT HICON *phIcon) override { return E_NOTIMPL; }
+    STDMETHODIMP OnClick() override;
+    STDMETHODIMP CreateMenuItem(IN HMENU hMenu) override;
+    STDMETHODIMP OnClickMenuItem() override;
+    STDMETHODIMP MeasureToolbar(IN RECT *prcToolbar, IN OUT RECT *prcProperty) override;
+    STDMETHODIMP GetValue(VARIANT *pvar) override;
+    STDMETHODIMP GetDefaultValue(VARIANT *pvar) override;
+    //@End IScreenshotEditorToolProperty
+
+    CScreenshotEditorToolPropertyColor(TCHAR *pszLabel)
+        : CScreenshotEditorToolPropertyBase(pszLabel)
+    {
+    }
+};
+
+class CScreenshotEditorToolPropertyButton
+    : public CScreenshotEditorToolPropertyBase
+{
+public:
+    //@Begin IScreenshotEditorToolProperty
+    STDMETHODIMP GetIcon(OUT HICON *phIcon) override { return E_NOTIMPL; }
+    STDMETHODIMP OnClick() override;
+    STDMETHODIMP CreateMenuItem(IN HMENU hMenu) override;
+    STDMETHODIMP OnClickMenuItem() override;
+    STDMETHODIMP MeasureToolbar(IN RECT *prcToolbar, IN OUT RECT *prcProperty) override;
+    STDMETHODIMP GetValue(VARIANT *pvar) override;
+    STDMETHODIMP GetDefaultValue(VARIANT *pvar) override;
+    //@End IScreenshotEditorToolProperty
+
+    CScreenshotEditorToolPropertyButton(TCHAR *pszLabel)
+        : CScreenshotEditorToolPropertyBase(pszLabel)
+    {
+    }
+};
+
 class CScreenshotEditorSelectionTemplateObject
     : public IScreenshotEditorObject
 {
@@ -628,6 +720,11 @@ public:
     STDMETHODIMP GetSelectedRegion(RECT *prc) override;
     STDMETHODIMP SetSelectedRegion(RECT *prc) override;
     STDMETHODIMP SetSelectedObject(IScreenshotEditorObject *pObj) override;
+    STDMETHODIMP CreateStandardToolProperty(
+        const CLSID &rclsid,
+        IN TCHAR *pszLabel,
+        OUT interface IScreenshotEditorToolProperty **ppObjOut
+    ) override;
     //@End IScreenshotEditor
 
 	CScreenshotEditorWindow()

@@ -12,6 +12,12 @@ STDMETHODIMP CRectangleTool::QueryInterface(const IID &riid, void **ppvOut)
         AddRef();
         return S_OK;
     }
+    else if (IsEqualGUID(riid, IID_IScreenshotEditorPropertyProvider))
+    {
+        *ppvOut = static_cast<IScreenshotEditorPropertyProvider *>(this);
+        AddRef();
+        return S_OK;
+    }
 
     return E_NOINTERFACE;
 }

@@ -1,7 +1,10 @@
 #pragma once
 #include "pch.h"
+#include "propprov.h"
 
-class CRectangleTool : public IScreenshotEditorTool
+class CRectangleTool
+    : public IScreenshotEditorTool
+    , public CPropertyProvider
 {
 public:
     enum RectangleToolType

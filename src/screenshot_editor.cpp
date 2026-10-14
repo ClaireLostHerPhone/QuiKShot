@@ -3964,6 +3964,47 @@ STDMETHODIMP CScreenshotEditorWindow::SetSelectedObject(IScreenshotEditorObject 
     return _SelectObject(pObj);
 }
 
+template <class T>
+static inline HRESULT CreateStandardToolPropertyT(TCHAR *pszLabel, OUT IScreenshotEditorToolProperty **ppObjOut)
+{
+    T *pInst = new (std::nothrow) T(pszLabel);
+
+    if (!pInst)
+        return E_OUTOFMEMORY;
+
+    if (SUCCEEDED(pInst->QueryInterface(IID_PPV_ARGS(ppObjOut))))
+    {
+        return S_OK;
+    }
+    else
+    {
+        delete pInst;
+        return E_FAIL;
+    }
+}
+
+STDMETHODIMP CScreenshotEditorWindow::CreateStandardToolProperty(
+    const CLSID &rclsid, IN TCHAR *pszLabel, OUT IScreenshotEditorToolProperty **ppObjOut)
+{
+    if (&rclsid == nullptr || !pszLabel || !ppObjOut)
+        return E_POINTER;
+
+    if (IsEqualGUID(rclsid, TOOLPROPID_LABEL))
+    {
+        return CreateStandardToolPropertyT<CScreenshotEditorToolPropertyLabel>(pszLabel, ppObjOut);
+    }
+    else if (IsEqualGUID(rclsid, TOOLPROPID_COLOR))
+    {
+        return CreateStandardToolPropertyT<CScreenshotEditorToolPropertyColor>(pszLabel, ppObjOut);
+    }
+    else if (IsEqualGUID(rclsid, TOOLPROPID_BUTTON))
+    {
+        return CreateStandardToolPropertyT<CScreenshotEditorToolPropertyButton>(pszLabel, ppObjOut);
+    }
+
+    return CLASS_E_CLASSNOTAVAILABLE;
+}
+
 bool CScreenshotEditorWindow::IsCursorShown()
 {
     // The architecture is a bit messy here. I might have the editor window track this on its own instead of
@@ -4144,7 +4185,7 @@ STDMETHODIMP CScreenshotEditorWindow::CEnumObjects::Reset()
     return S_OK;
 }
 
-STDMETHODIMP_(HRESULT __stdcall) CScreenshotEditorWindow::CEnumObjects::Clone(IEnumUnknown **ppenum)
+STDMETHODIMP CScreenshotEditorWindow::CEnumObjects::Clone(IEnumUnknown **ppenum)
 {
     if (!ppenum)
         return E_POINTER;
@@ -4370,4 +4411,176 @@ HRESULT CEditHistoryManager::Unlock()
 {
     _fIsLocked = false;
     return S_OK;
+}
+
+//
+// CScreenshotEditorToolPropertyBase
+//
+
+STDMETHODIMP CScreenshotEditorToolPropertyBase::QueryInterface(REFIID iid, void **ppv)
+{
+    if (IsEqualGUID(iid, IID_IScreenshotEditorToolProperty))
+    {
+        AddRef();
+        *ppv = static_cast<IScreenshotEditorToolProperty *>(this);
+        return S_OK;
+    }
+
+    return E_NOINTERFACE;
+}
+
+STDMETHODIMP CScreenshotEditorToolPropertyBase::GetSite(REFIID riid, void **ppvSite)
+{
+    if (!ppvSite)
+        return E_POINTER;
+    if (!_pTool)
+        return E_NOINTERFACE;
+
+    return _pTool->QueryInterface(riid, ppvSite);
+}
+
+STDMETHODIMP CScreenshotEditorToolPropertyBase::SetSite(IUnknown *pUnkSite)
+{
+    HRESULT hr = E_FAIL;
+
+    if (_pTool)
+    {
+        _pTool->Release();
+        _pTool = nullptr;
+    }
+
+    if (pUnkSite)
+    {
+        hr = pUnkSite->QueryInterface(IID_PPV_ARGS(&_pTool));
+    }
+    else
+    {
+        hr = S_OK;
+    }
+
+    return hr;
+}
+
+STDMETHODIMP CScreenshotEditorToolPropertyBase::GetLabel(OUT TCHAR **ppszOut)
+{
+    if (!ppszOut)
+        return E_POINTER;
+
+    if (_szLabel[0] == TEXT('\0'))
+    {
+        *ppszOut = nullptr;
+    }
+    else
+    {
+        size_t cch = _tcslen(_szLabel);
+        size_t cb = sizeof(TCHAR) * cch + 1;
+        *ppszOut = (TCHAR *)CoTaskMemAlloc(cb);
+        if (!ppszOut)
+            return E_OUTOFMEMORY;
+        _tcscpy_s(*ppszOut, cch, _szLabel);
+    }
+
+    return S_OK;
+}
+
+//
+// CScreenshotEditorToolPropertyLabel
+//
+
+STDMETHODIMP CScreenshotEditorToolPropertyLabel::CreateMenuItem(IN HMENU hMenu)
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CScreenshotEditorToolPropertyLabel::OnClickMenuItem()
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CScreenshotEditorToolPropertyLabel::MeasureToolbar(IN RECT *prcToolbar, IN OUT RECT *prcProperty)
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CScreenshotEditorToolPropertyLabel::GetValue(VARIANT *pvar)
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CScreenshotEditorToolPropertyLabel::GetDefaultValue(VARIANT *pvar)
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CScreenshotEditorToolPropertyLabel::OnClick()
+{
+    return E_NOTIMPL;
+}
+
+//
+// CScreenshotEditorToolPropertyColor
+//
+
+STDMETHODIMP CScreenshotEditorToolPropertyColor::CreateMenuItem(IN HMENU hMenu)
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CScreenshotEditorToolPropertyColor::OnClickMenuItem()
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CScreenshotEditorToolPropertyColor::MeasureToolbar(IN RECT *prcToolbar, IN OUT RECT *prcProperty)
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CScreenshotEditorToolPropertyColor::GetValue(VARIANT *pvar)
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CScreenshotEditorToolPropertyColor::GetDefaultValue(VARIANT *pvar)
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CScreenshotEditorToolPropertyColor::OnClick()
+{
+    return E_NOTIMPL;
+}
+
+//
+// CScreenshotEditorToolPropertyButton
+//
+
+STDMETHODIMP CScreenshotEditorToolPropertyButton::CreateMenuItem(IN HMENU hMenu)
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CScreenshotEditorToolPropertyButton::OnClickMenuItem()
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CScreenshotEditorToolPropertyButton::MeasureToolbar(IN RECT *prcToolbar, IN OUT RECT *prcProperty)
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CScreenshotEditorToolPropertyButton::GetValue(VARIANT *pvar)
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CScreenshotEditorToolPropertyButton::GetDefaultValue(VARIANT *pvar)
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CScreenshotEditorToolPropertyButton::OnClick()
+{
+    return E_NOTIMPL;
 }

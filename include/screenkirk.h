@@ -88,6 +88,15 @@ DECLARE_INTERFACE_IID_(IScreenshotEditor, IUnknown, "{0A573BD7-2C24-4602-A842-AC
      * Sets the selected object in the screenshot editor.
      */
     STDMETHOD(SetSelectedObject)(THIS_ interface IScreenshotEditorObject *pObj) PURE;
+
+    /**
+     * Creates a standard tool property.
+     */
+    STDMETHOD(CreateStandardToolProperty)(
+        THIS_
+        REFCLSID rclsid,
+        IN QS_TCHAR *pszLabel,
+        OUT interface IScreenshotEditorToolProperty **ppObjOut) PURE;
 };
 // {0A573BD7-2C24-4602-A842-ACC82B12E1F1}
 DEFINE_GUID(IID_IScreenshotEditor,
@@ -256,8 +265,69 @@ DEFINE_GUID(TOOLPROPID_LABEL,
 DEFINE_GUID(TOOLPROPID_COLOR, 
     0xf98ac59, 0x5716, 0x48ca, 0x98, 0xcd, 0x38, 0xdf, 0x9b, 0x53, 0x3, 0x11);
 
+// Button property
+// {0F98AC59-5716-48CA-98CD-38DF9B530312}
+DEFINE_GUID(TOOLPROPID_BUTTON, 
+    0xf98ac59, 0x5716, 0x48ca, 0x98, 0xcd, 0x38, 0xdf, 0x9b, 0x53, 0x3, 0x12);
+
+/**
+ * Interface for tool properties, which are GUI controls that control variables that a tool can
+ * read from.
+ * 
+ * The site of a tool property is the owner tool. To get the site of the screenshot editor from a
+ * tool property, first get the site of the property to reference the tool, and then get the site
+ * of the tool to reference the screenshot editor.
+ */
+#undef INTERFACE
+#define INTERFACE IScreenshotEditorToolProperty
+DECLARE_INTERFACE_IID_(IScreenshotEditorToolProperty, IObjectWithSite, "{DD03F90F-E4A2-4561-8B0C-262D0A7DF87A}")
+{
+    STDMETHOD(QueryInterface)(THIS_ REFIID riid, OUT void **ppvOut) PURE;
+    STDMETHOD_(ULONG, AddRef)(THIS) PURE;
+    STDMETHOD_(ULONG, Release)(THIS) PURE;
+    STDMETHOD(SetSite)(THIS_ IUnknown *pUnkSite) PURE;
+    STDMETHOD(GetSite)(THIS_ REFIID riid, void **ppvSite) PURE;
+
+    STDMETHOD(GetLabel)(THIS_ OUT QS_TCHAR **ppszOut) PURE;
+    STDMETHOD(GetIcon)(THIS_ OUT HICON *phIcon) PURE;
+    STDMETHOD(OnClick)(THIS) PURE;
+    STDMETHOD(CreateMenuItem)(THIS_ IN HMENU hMenu) PURE;
+    STDMETHOD(OnClickMenuItem)(THIS) PURE;
+    STDMETHOD(MeasureToolbar)(THIS_ IN RECT *prcToolbar, IN OUT RECT *prcProperty) PURE;
+    STDMETHOD(GetValue)(THIS_ VARIANT *pvar) PURE;
+    STDMETHOD(GetDefaultValue)(THIS_ VARIANT *pvar) PURE;
+};
+
+// {DD03F90F-E4A2-4561-8B0C-262D0A7DF87A}
+DEFINE_GUID(IID_IScreenshotEditorToolProperty, 
+    0xdd03f90f, 0xe4a2, 0x4561, 0x8b, 0xc, 0x26, 0x2d, 0xa, 0x7d, 0xf8, 0x7a);
+
+#undef INTERFACE
+#define INTERFACE IScreenshotEditorPropertyProvider
+DECLARE_INTERFACE_IID_(IScreenshotEditorPropertyProvider, IUnknown, "{9D9C73E4-62E0-41E1-B1B4-E1EF63E21F28}")
+{
+    STDMETHOD(QueryInterface)(THIS_ REFIID riid, OUT void **ppvOut) PURE;
+    STDMETHOD_(ULONG, AddRef)(THIS) PURE;
+    STDMETHOD_(ULONG, Release)(THIS) PURE;
+
+    /**
+    * Gets an array of properties provided by the tool.
+    */
+    STDMETHOD(GetProperties)(THIS_ SAFEARRAY **ppsaProperties) PURE;
+
+    /**
+    * Called when a tool property is changed.
+    */
+    STDMETHOD(OnPropertyChanged)(THIS_ IScreenshotEditorToolProperty *pProperty) PURE;
+};
+
+// {9D9C73E4-62E0-41E1-B1B4-E1EF63E21F28}
+DEFINE_GUID(IID_IScreenshotEditorPropertyProvider, 
+    0x9d9c73e4, 0x62e0, 0x41e1, 0xb1, 0xb4, 0xe1, 0xef, 0x63, 0xe2, 0x1f, 0x28);
+
 //@Begin IScreenshotEditorTool::GetFlags() flags
 #define SSETF_DRAWSELECTION (1 << 0)
+#define SSETF_ALWAYSSHOWPROPERTIES (1 << 1)
 //@End IScreenshotEditorTool::GetFlags() flags
 
 /**

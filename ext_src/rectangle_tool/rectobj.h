@@ -1,9 +1,11 @@
 #pragma once
 #include "pch.h"
+#include "propprov.h"
 
 class CRectangleObject
     : public IScreenshotEditorObject
     , public IScreenshotEditorObjectRendererGDI
+    , public CPropertyProvider
 {
 public:
     enum RectangleType
@@ -37,6 +39,7 @@ public:
     STDMETHODIMP_(BOOL) IsVisualDirty() override;
     STDMETHODIMP Move(RECT *prcNew) override;
     STDMETHODIMP CreateRenderer(const REFIID riid, OUT IScreenshotEditorObjectRenderer **ppRendererOut) override;
+    STDMETHODIMP CreateHistoryManager(const REFIID riid, OUT IScreenshotEditorObjectHistoryManager **ppHistoryManagerOut) override;
     //@End IScreenshotRendererObject
 
     //@Begin IScreenshotRendererObjectRendererGDI
