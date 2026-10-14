@@ -67,7 +67,15 @@ struct OSVersion
     }
 };
 
+struct CommonControlsVersion
+{
+    DWORD dwMajorVersion;
+    DWORD dwMinorVersion;
+    DWORD dwBuildNumber;
+};
+
 OSVersion *GetOSVersion();
+CommonControlsVersion GetCommonControlsVersion();
 void _tcstrim(TCHAR *psz);
 const TCHAR *PathFindFileName(const TCHAR *pszPath);
 const TCHAR *PathFindFileExtension(const TCHAR *pszPath);

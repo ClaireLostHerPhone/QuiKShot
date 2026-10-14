@@ -23,6 +23,51 @@ static HRESULT GetAdjustedObjectVisualRect(IScreenshotEditorObject *pObj, RECT *
     return E_FAIL;
 }
 
+template <int T_iBackgroundColor, bool T_fForComCtl>
+static HBITMAP IconToBitmapT(HICON hicon)
+{
+    if (T_fForComCtl && GetCommonControlsVersion().dwMajorVersion >= 6)
+    {
+        return HICONToHBITMAP(hicon);
+    }
+    else
+    {
+        int cxIcon = GetSystemMetrics(SM_CXSMICON);
+        int cyIcon = GetSystemMetrics(SM_CYSMICON);
+
+        HDC hdcDesktop = GetDC(HWND_DESKTOP);
+        HDC hdc = CreateCompatibleDC(hdcDesktop);
+        HBITMAP hbm = CreateCompatibleBitmap(hdcDesktop, cxIcon, cyIcon);
+        HGDIOBJ hbmOld = SelectObject(hdc, hbm);
+
+        HBRUSH hbr = GetSysColorBrush(T_iBackgroundColor);
+
+        RECT rcIcon = { 0 };
+        rcIcon.right = cxIcon;
+        rcIcon.bottom = cyIcon;
+
+        FillRect(hdc, &rcIcon, hbr);
+
+        DrawIconEx(hdc, 0, 0, hicon, cxIcon, cyIcon, 0, nullptr, DI_NORMAL);
+
+        SelectObject(hdc, hbmOld);
+        DeleteDC(hdc);
+        ReleaseDC(HWND_DESKTOP, hdcDesktop);
+
+        return hbm;
+    }
+}
+
+static HBITMAP ToolbarIconToBitmap(HICON hicon)
+{
+    return IconToBitmapT<COLOR_BTNFACE, true>(hicon);
+}
+
+static HBITMAP MenuIconToBitmap(HICON hicon)
+{
+    return IconToBitmapT<COLOR_MENU, false>(hicon);
+}
+
 //
 // CEditorToolbar
 //
@@ -131,7 +176,7 @@ LRESULT CEditorToolbar::_OnCreate(CREATESTRUCT *pcs)
         int idxIconCursorShow = 0;
 
         {
-            HBITMAP hbm = HICONToHBITMAP(hiconSelect);
+            HBITMAP hbm = ToolbarIconToBitmap(hiconSelect);
             _vhbmIcons.Push(hbm);
             DestroyIcon(hiconSelect);
 
@@ -143,7 +188,7 @@ LRESULT CEditorToolbar::_OnCreate(CREATESTRUCT *pcs)
         }
 
         {
-            HBITMAP hbm = HICONToHBITMAP(hiconMove);
+            HBITMAP hbm = ToolbarIconToBitmap(hiconMove);
             _vhbmIcons.Push(hbm);
             DestroyIcon(hiconMove);
 
@@ -155,7 +200,7 @@ LRESULT CEditorToolbar::_OnCreate(CREATESTRUCT *pcs)
         }
 
         {
-            HBITMAP hbm = HICONToHBITMAP(hiconCursorShow);
+            HBITMAP hbm = ToolbarIconToBitmap(hiconCursorShow);
             _vhbmIcons.Push(hbm);
             DestroyIcon(hiconCursorShow);
 
@@ -200,7 +245,7 @@ LRESULT CEditorToolbar::_OnCreate(CREATESTRUCT *pcs)
                 int idxExtToolIcon = 0;
                 if (hiconExtTool)
                 {
-                    HBITMAP hbm = HICONToHBITMAP(hiconExtTool);
+                    HBITMAP hbm = ToolbarIconToBitmap(hiconExtTool);
                     _vhbmIcons.Push(hbm);
                     DestroyIcon(hiconExtTool);
 
@@ -241,6 +286,22 @@ LRESULT CEditorToolbar::_OnCreate(CREATESTRUCT *pcs)
     SendMessage(_hwndToolbar, TB_ADDBUTTONS, cSuccessfulTools + 1, (LPARAM)rgtbButtons);
 
     delete[] rgtbButtons;
+
+    // Correct the sizes of the icon buttons so that they're square instead of rectangles.
+    // I think common controls leaves some additional padding for the labels, but these
+    // are labelless buttons.
+    DWORD dwPadding = SendMessage(_hwndToolbar, TB_GETPADDING, 0, 0);
+    int iPaddingH = LOWORD(dwPadding);
+    int iPaddingV = HIWORD(dwPadding);
+    for (int i = 0, j = SendMessage(_hwndToolbar, TB_BUTTONCOUNT, 0, 0); i < j; i++)
+    {
+        TBBUTTONINFO tbbi = { sizeof(tbbi) };
+        tbbi.dwMask = TBIF_SIZE | TBIF_BYINDEX;
+
+        tbbi.cx = 16 + iPaddingH;
+
+        SendMessage(_hwndToolbar, TB_SETBUTTONINFO, i, (LPARAM)&tbbi);
+    }
 
     return DefWindowProc(_hwnd, WM_CREATE, 0, (LPARAM)pcs);
 }
@@ -492,11 +553,6 @@ LRESULT CEditorActionsStrip::v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPAR
             return 1;
         }
 
-        case WM_DRAWITEM:
-        {
-            return _OnDrawItem(wParam, (DRAWITEMSTRUCT *)lParam);
-        }
-
         default:
         {
             if (_hwndActions && uMsg >= WM_USER)
@@ -533,9 +589,10 @@ LRESULT CEditorActionsStrip::_OnCreate(CREATESTRUCT *pcs)
     SendMessage(_hwndActions, TB_SETEXTENDEDSTYLE, 0, TBSTYLE_EX_DOUBLEBUFFER | TBSTYLE_EX_DRAWDDARROWS);
 
     _LoadIcons();
-    _EnumOpenWithHandlers();
+    HRESULT hrExternEditor = _EnumOpenWithHandlers();
 
     TBBUTTON rgtbButTools[4] = { 0 };
+    int i = 0;
     {
         TBADDBITMAP ab;
         ab.hInst = HINST_COMMCTRL;
@@ -577,15 +634,18 @@ LRESULT CEditorActionsStrip::_OnCreate(CREATESTRUCT *pcs)
             SendMessage(_hwndActions, TB_ADDBITMAP, 1, (LPARAM)&ab2);
         }
 
-        int i = 0;
+        // Only show the "open in" button if we have external editors available.
+        if (SUCCEEDED(hrExternEditor))
+        {
+            rgtbButTools[i].idCommand = IDM_OPENINEXTERNALEDITOR;
+            rgtbButTools[i].iString = (INT_PTR)TEXT("Open in...");
+            rgtbButTools[i].fsState = TBSTATE_ENABLED;
+            rgtbButTools[i].fsStyle = BTNS_BUTTON | BTNS_AUTOSIZE | BTNS_DROPDOWN;
+            rgtbButTools[i].iBitmap = iIconExtEditFirst;
 
-        rgtbButTools[i].idCommand = IDM_OPENINEXTERNALEDITOR;
-        rgtbButTools[i].iString = (INT_PTR)TEXT("Open in...");
-        rgtbButTools[i].fsState = TBSTATE_ENABLED;
-        rgtbButTools[i].fsStyle = BTNS_BUTTON | BTNS_AUTOSIZE | BTNS_DROPDOWN;
-        rgtbButTools[i].iBitmap = (_vExternEditors.GetSize() >= 1) ? iIconExtEditFirst : STD_FILENEW;
-
-        i++;
+            i++;
+        }
+        
         rgtbButTools[i].idCommand = IDM_COPY;
         rgtbButTools[i].iString = (INT_PTR)TEXT("Copy");
         rgtbButTools[i].fsState = TBSTATE_ENABLED;
@@ -607,7 +667,7 @@ LRESULT CEditorActionsStrip::_OnCreate(CREATESTRUCT *pcs)
         rgtbButTools[i].iBitmap = _hbmIconDiscard ? iIconDiscard : STD_DELETE;
     }
 
-    SendMessage(_hwndActions, TB_ADDBUTTONS, ARRAYSIZE(rgtbButTools), (LPARAM)&rgtbButTools);
+    SendMessage(_hwndActions, TB_ADDBUTTONS, i + 1, (LPARAM)&rgtbButTools);
 
     return DefWindowProc(_hwnd, WM_CREATE, 0, (LPARAM)pcs);
 }
@@ -625,6 +685,8 @@ LRESULT CEditorActionsStrip::_OnDestroy()
     {
         DestroyIcon(eed.hIcon);
         DeleteObject(eed.hbmIcon);
+        if (eed.hbmIconMenu)
+            DeleteObject(eed.hbmIconMenu);
     }
 
     return DefWindowProc(_hwnd, WM_DESTROY, 0, 0);
@@ -700,8 +762,7 @@ LRESULT CEditorActionsStrip::_OnNotify(NMHDR *pnmh, WPARAM wParam, LPARAM lParam
             mii.wID = IDM_EXTERNEDITFIRST + idxMenuItem;
             mii.dwTypeData = (TCHAR *)eed.szName;
             mii.cch = _tcslen(eed.szName);
-            //mii.hbmpItem = HBMMENU_CALLBACK;
-            mii.hbmpItem = eed.hbmIcon; // TODO: See what systems premultiplied alpha works on.
+            mii.hbmpItem = eed.hbmIconMenu ? eed.hbmIconMenu : eed.hbmIcon;
             InsertMenuItem(hMenu, idxMenuItem++, FALSE, &mii);
         }
 
@@ -733,36 +794,6 @@ LRESULT CEditorActionsStrip::_OnNotify(NMHDR *pnmh, WPARAM wParam, LPARAM lParam
     return 0;
 }
 
-LRESULT CEditorActionsStrip::_OnDrawItem(int idControl, DRAWITEMSTRUCT *pdis)
-{
-    if (pdis->CtlType == ODT_MENU)
-    {
-        if (pdis->itemID >= IDM_EXTERNEDITFIRST && pdis->itemID <= IDM_EXTERNEDITLAST
-            && _vExternEditors.GetSize() >= (size_t)pdis->itemID - IDM_EXTERNEDITFIRST)
-        {
-            ExternalEditorDef *peed = &_vExternEditors.At((size_t)pdis->itemID - IDM_EXTERNEDITFIRST);
-
-            int cxIcon = PortableGetSystemMetricsForDpi(SM_CXSMICON, _uDpi);
-            int cyIcon = PortableGetSystemMetricsForDpi(SM_CYSMICON, _uDpi);
-            
-            DrawIconEx(
-                pdis->hDC,
-                pdis->rcItem.left - cxIcon,
-                pdis->rcItem.top + (pdis->rcItem.bottom - pdis->rcItem.top - cyIcon) / 2,
-                peed->hIcon,
-                cxIcon, cyIcon,
-                0,
-                nullptr,
-                DI_NORMAL
-            );
-
-            return 1;
-        }
-    }
-
-    return DefWindowProc(_hwnd, WM_DRAWITEM, idControl, (LPARAM)pdis);
-}
-
 HRESULT CEditorActionsStrip::_LoadIcons()
 {
     if (GetOSVersion()->dwMajorVersion >= 5 && !(GetOSVersion()->dwMajorVersion == 5 && GetOSVersion()->dwMinorVersion < 1))
@@ -774,21 +805,21 @@ HRESULT CEditorActionsStrip::_LoadIcons()
         HICON hiconDiscard = (HICON)LoadImage(hmShell32, MAKEINTRESOURCE(240), IMAGE_ICON, cxIcon, cyIcon, 0);
         if (hiconDiscard)
         {
-            _hbmIconDiscard = HICONToHBITMAP(hiconDiscard);
+            _hbmIconDiscard = ToolbarIconToBitmap(hiconDiscard);
             DestroyIcon(hiconDiscard);
         }
 
         HICON hiconCopy = (HICON)LoadImage(hmShell32, MAKEINTRESOURCE(243), IMAGE_ICON, cxIcon, cyIcon, 0);
         if (hiconCopy)
         {
-            _hbmIconCopy = HICONToHBITMAP(hiconCopy);
+            _hbmIconCopy = ToolbarIconToBitmap(hiconCopy);
             DestroyIcon(hiconCopy);
         }
 
         HICON hiconSave = (HICON)LoadImage(hmShell32, MAKEINTRESOURCE(16761), IMAGE_ICON, cxIcon, cyIcon, 0);
         if (hiconSave)
         {
-            _hbmIconSave = HICONToHBITMAP(hiconSave);
+            _hbmIconSave = ToolbarIconToBitmap(hiconSave);
             DestroyIcon(hiconSave);
         }
         else
@@ -807,6 +838,15 @@ HRESULT CEditorActionsStrip::_LoadIcons()
 HRESULT CEditorActionsStrip::_EnumOpenWithHandlers()
 {
     HRESULT hr = E_FAIL;
+
+    // SHAssocEnumHandlers is only available since Windows Vista. For now, we'll just return that
+    // there's no support if we're running on an older operating system.
+    // TODO: We can enumerate HKEY_CLASSES_ROOT to find association handlers manually on older
+    // operating systems.
+    if (GetOSVersion()->IsLessEqualVersion(5, 2))
+    {
+        return hr;
+    }
 
     HMODULE hmShell32 = LoadLibrary(TEXT("shell32.dll"));
     if (hmShell32)
@@ -845,9 +885,23 @@ HRESULT CEditorActionsStrip::_EnumOpenWithHandlers()
                         HICON hicon;
                         ExtractIconEx(pszIconPath, 0, nullptr, &hicon, 1);
                         eed.hIcon = hicon;
-                        HBITMAP hbmIconRaw = HICONToHBITMAP(hicon);
+
+                        // N.B. On pre-comctlv6 systems (Windows 2000 and prior), this will fill the background
+                        // of the icon for the toolbar. The menu will use a separate icon since its color differs.
+                        // On Vista (maybe XP?) and higher, toolbars and menus both support alpha-blended icons, so the same
+                        // bitmap can be used for both.
+                        HBITMAP hbmIconRaw = ToolbarIconToBitmap(hicon);
                         HBITMAP hbmPremult = nullptr;
-                        PremultiplyAlpha(hbmIconRaw, &hbmPremult);
+
+                        if (GetCommonControlsVersion().dwMajorVersion >= 6)
+                        {
+                            PremultiplyAlpha(hbmIconRaw, &hbmPremult);
+                        }
+                        else
+                        {
+                            eed.hbmIconMenu = MenuIconToBitmap(hicon);
+                        }
+
                         if (hbmPremult)
                         {
                             eed.hbmIcon = hbmPremult;
@@ -1246,11 +1300,11 @@ HRESULT CEditorFloatingToolbar::_DoLayout()
     GetWindowRect(_pToolbarTools->GetHWND(), &rcTools);
     MapWindowRect(HWND_DESKTOP, GetParent(_pToolbarTools->GetHWND()), &rcTools);
 
-    // Move the toolbox to appear below the properties toolbar:
-    OffsetRect(&rcTools, 0, rcProps.bottom);
+    // Move the properties toolbar to appear below the toolbox:
+    OffsetRect(&rcProps, 0, rcTools.bottom);
 
-    // Move the actions strip to appear below the toolbox:
-    OffsetRect(&rcActions, 0, rcTools.bottom);
+    // Move the actions strip to appear below the toolbox or properties toolbar:
+    OffsetRect(&rcActions, 0, rcProps.bottom);
 
     // I feel that the actions strip looks a bit off with the height that common
     // controls gives, so I'll make it a little bigger manually:

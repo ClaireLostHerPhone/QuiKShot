@@ -64,7 +64,7 @@ OSVersion *GetOSVersion()
             : 0;
 
         // On NT, the build number is the whole dwBuildNumber property. On DOS-based Windows, it
-        // it just the lower word of the build number.
+        // is just the lower word of the build number.
         g_osVersion.dwBuildNumber = (g_osVersion.flags & OSVF_WINNT)
             ? osvi.dwBuildNumber
             : LOWORD(osvi.dwBuildNumber);
@@ -74,6 +74,41 @@ OSVersion *GetOSVersion()
 #pragma warning(pop)
 
     return nullptr;
+}
+
+typedef struct _DLLVERSIONINFO {
+    DWORD cbSize;
+    DWORD dwMajorVersion;
+    DWORD dwMinorVersion;
+    DWORD dwBuildNumber;
+    DWORD dwPlatformID;
+} DLLVERSIONINFO;
+
+typedef HRESULT (CALLBACK *DllGetVersion_t)(DLLVERSIONINFO *pVerInfo);
+
+CommonControlsVersion GetCommonControlsVersion()
+{
+    static CommonControlsVersion result = { 0 };
+
+    if (result.dwMajorVersion != 0)
+        return result;
+
+    HMODULE hComctl32 = GetModuleHandle(TEXT("comctl32.dll"));
+    DllGetVersion_t pfnDllGetVersion = nullptr;
+
+    if (hComctl32 && (pfnDllGetVersion = (DllGetVersion_t)GetProcAddress(hComctl32, "DllGetVersion")))
+    {
+        DLLVERSIONINFO dvi = { sizeof(dvi) };
+        HRESULT hr = pfnDllGetVersion(&dvi);
+        if (SUCCEEDED(hr))
+        {
+            result.dwMajorVersion = dvi.dwMajorVersion;
+            result.dwMinorVersion = dvi.dwMinorVersion;
+            result.dwBuildNumber = dvi.dwBuildNumber;
+        }
+    }
+
+    return result;
 }
 
 //

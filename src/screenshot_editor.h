@@ -110,6 +110,7 @@ private:
         TCHAR szProgramPath[MAX_PATH];
         HICON hIcon;
         HBITMAP hbmIcon;
+        HBITMAP hbmIconMenu; // The bitmap for the icon used in menus on old systems.
     };
 
     class CScreenshotEditorWindow *_pEditor;
@@ -127,7 +128,6 @@ protected:
     LRESULT _OnDestroy();
     LRESULT _OnCommand(WPARAM wParam, LPARAM lParam);
     LRESULT _OnNotify(NMHDR *pnmh, WPARAM wParam, LPARAM lParam, bool *pfHandled);
-    LRESULT _OnDrawItem(int idControl, DRAWITEMSTRUCT *pdis);
 
     HRESULT _LoadIcons();
     HRESULT _EnumOpenWithHandlers();
