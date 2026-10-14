@@ -101,7 +101,7 @@
 			IntermediateDirectory="..\bin\vs2005-screenkirk-Win32-$(ConfigurationName)"
 			ConfigurationType="1"
 			CharacterSet="1"
-			WholeProgramOptimization="3"
+			WholeProgramOptimization="1"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"

@@ -30,9 +30,10 @@ HRESULT CConfigManager::GetBool(const TCHAR *pszName, OUT bool *pfOut)
 
     DWORD dwValue = 0;
     DWORD dwcch = sizeof(DWORD);
-    LONG ls = RegGetValue(_hkey, nullptr, pszName, RRF_RT_REG_DWORD, nullptr, &dwValue, &dwcch);
+    DWORD dwType = 0;
+    LONG ls = RegQueryValueEx(_hkey, pszName, 0, &dwType, (BYTE *)&dwValue, &dwcch);
 
-    if (ls == ERROR_SUCCESS)
+    if (ls == ERROR_SUCCESS && dwType == REG_DWORD)
     {
         *pfOut = dwValue != 0;
         return S_OK;
@@ -47,12 +48,16 @@ HRESULT CConfigManager::GetString(const TCHAR *pszName, OUT TCHAR **ppszOut)
         return E_POINTER;
 
     DWORD dwcch;
-    LONG ls = RegGetValue(_hkey, nullptr, pszName, RRF_RT_REG_SZ, nullptr, nullptr, &dwcch);
+    DWORD dwType = 0;
+    LONG ls = RegQueryValueEx(_hkey, pszName, 0, &dwType, nullptr, &dwcch);
 
-    if (ls == ERROR_SUCCESS)
+    if (ls == ERROR_SUCCESS && dwType == REG_SZ)
     {
-        *ppszOut = (TCHAR *)CoTaskMemAlloc((dwcch + 1) * sizeof(TCHAR));
-        ls = RegGetValue(_hkey, nullptr, pszName, RRF_RT_REG_SZ, nullptr, *ppszOut, &dwcch);
+        size_t cb = (dwcch + 2) * sizeof(TCHAR);
+        *ppszOut = (TCHAR *)CoTaskMemAlloc(cb);
+        ZeroMemory(*ppszOut, cb);
+
+        ls = RegQueryValueEx(_hkey, pszName, 0, nullptr, (BYTE *)*ppszOut, &dwcch);
         if (ls == ERROR_SUCCESS)
         {
             return S_OK;
