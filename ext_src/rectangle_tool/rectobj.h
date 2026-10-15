@@ -5,7 +5,6 @@
 class CRectangleObject
     : public IScreenshotEditorObject
     , public IScreenshotEditorObjectRendererGDI
-    , public CPropertyProvider
 {
 public:
     enum RectangleType
@@ -15,6 +14,7 @@ public:
     };
 
 private:
+    CPropertyProvider _propProvider;
     IScreenshotEditor *_pEditor;
     HDC _hdc;
     RECT _rcPosLogical;
@@ -56,6 +56,13 @@ public:
     {
         ZeroMemory(&_rcPosLogical, sizeof(_rcPosLogical));
         ZeroMemory(&_rcPosVisual, sizeof(_rcPosVisual));
+
+        // We set the site of the property provider, but instantly release that reference
+        // because it is a circular reference.
+        if (SUCCEEDED(_propProvider.SetSite(static_cast<IScreenshotEditorObject *>(this))))
+        {
+            Release();
+        }
     }
 
     HRESULT UpdatePosition(RECT *prc);

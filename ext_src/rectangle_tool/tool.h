@@ -4,7 +4,6 @@
 
 class CRectangleTool
     : public IScreenshotEditorTool
-    , public CPropertyProvider
 {
 public:
     enum RectangleToolType
@@ -14,7 +13,7 @@ public:
     };
 
 private:
-    IUnknown *_pUnkSite;
+    CPropertyProvider _propProvider;
     IScreenshotEditor *_pEditor;
     IScreenshotEditorObject *_pObjCur;
     RectangleToolType _type;
@@ -47,11 +46,16 @@ public:
 
     CRectangleTool(RectangleToolType type)
         : _uRefCount(0)
-        , _pUnkSite(nullptr)
         , _pEditor(nullptr)
         , _pObjCur(nullptr)
         , _type(type)
     {
+        // We set the site of the property provider, but instantly release that reference
+        // because it is a circular reference.
+        if (SUCCEEDED(_propProvider.SetSite(this)))
+        {
+            Release();
+        }
     }
 };
 

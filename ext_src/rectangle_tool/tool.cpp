@@ -27,12 +27,14 @@ STDMETHODIMP CRectangleTool::GetSite(REFIID riid, void **ppvSite)
     if (!ppvSite)
         return E_POINTER;
 
-    return _pUnkSite->QueryInterface(riid, ppvSite);
+    if (!_pEditor)
+        return E_FAIL;
+
+    return _pEditor->QueryInterface(riid, ppvSite);
 }
 
 STDMETHODIMP CRectangleTool::SetSite(IUnknown *pUnkSite)
 {
-    _pUnkSite = pUnkSite;
     HRESULT hr = E_FAIL;
 
     if (_pEditor)

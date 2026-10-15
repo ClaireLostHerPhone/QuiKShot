@@ -173,9 +173,27 @@ class CEditorToolProperties : public CWindow<CEditorToolProperties>
     DEFINE_WINDOW_CLASS("screenkirk_EditorToolProperties");
 
 private:
+    enum PropertyOwnerType
+    {
+        PROPOWNERT_TOOL,
+        PROPOWNERT_OBJECT,
+    };
+
+    struct PropertyInfo
+    {
+        IScreenshotEditorToolProperty *pProp;
+        PropertyOwnerType ownerType;
+        union
+        {
+            IScreenshotEditorTool *pTool;
+            IScreenshotEditorObject *pObj;
+        } owner;
+    };
+
     class CScreenshotEditorWindow *_pEditor;
     HWND _hwndToolbar;
     CDynamicArray<HBITMAP> _vhbmIcons;
+    CDynamicArray<PropertyInfo> _vPropInfo;
     UINT _uDpi;
 
 protected:
@@ -184,6 +202,11 @@ protected:
     LRESULT _OnDestroy();
     LRESULT _OnCommand(WPARAM wParam, LPARAM lParam);
     LRESULT _OnNotify(NMHDR *pnmh, WPARAM wParam, bool *pfHandled);
+
+    HRESULT _CreateToolbar();
+    HRESULT _EnumerateProperties(
+        IScreenshotEditorPropertyProvider *pProvider, CDynamicArray<IScreenshotEditorToolProperty *> *pvpProps);
+    HRESULT _ClearPropInfo();
 
 public:
     static HRESULT RegisterWindowClass();
@@ -201,6 +224,8 @@ public:
     }
 
     inline class CScreenshotEditorWindow *GetOwnerEditor() { return _pEditor; }
+
+    HRESULT Refresh(IScreenshotEditorTool *pToolSel, IScreenshotEditorObject *pObjSel);
 };
 
 //
@@ -471,6 +496,8 @@ public:
     //@Begin IScreenshotEditorToolProperty
     STDMETHODIMP GetLabel(OUT TCHAR **ppszOut) override;
     STDMETHOD(GetIcon)(OUT HICON *phIcon) PURE;
+    STDMETHODIMP GetHWND(HWND *phwnd) override { return E_NOTIMPL; }
+    STDMETHODIMP CreateToolbarItem(HWND hwndToolbar) override { return S_FALSE; }
     STDMETHOD(OnClick)() PURE;
     STDMETHOD(CreateMenuItem)(IN HMENU hMenu) PURE;
     STDMETHOD(OnClickMenuItem)() PURE;
@@ -532,6 +559,7 @@ class CScreenshotEditorToolPropertyButton
 public:
     //@Begin IScreenshotEditorToolProperty
     STDMETHODIMP GetIcon(OUT HICON *phIcon) override { return E_NOTIMPL; }
+    STDMETHODIMP CreateToolbarItem(HWND hwndToolbar) override;
     STDMETHODIMP OnClick() override;
     STDMETHODIMP CreateMenuItem(IN HMENU hMenu) override;
     STDMETHODIMP OnClickMenuItem() override;
@@ -750,6 +778,7 @@ public:
 	}
 
     bool IsCursorShown();
+    HRESULT RefreshPropertiesUI();
     HRESULT CopyToClipboardAndAccept();
     HRESULT SaveImageToFileAndAccept();
     int GetExtensionToolCount();

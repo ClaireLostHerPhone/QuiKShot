@@ -6,6 +6,8 @@ HRESULT CPropertyProvider::_InitializeProperties()
     if (_fPropsInitialized)
         return S_OK;
 
+    HRESULT hr = E_PENDING;
+
     IObjectWithSite *pows = nullptr;
     if (SUCCEEDED(QueryInterface(IID_PPV_ARGS(&pows))))
     {
@@ -13,14 +15,39 @@ HRESULT CPropertyProvider::_InitializeProperties()
         if (SUCCEEDED(pows->GetSite(IID_PPV_ARGS(&pEditor))))
         {
             pEditor->CreateStandardToolProperty(TOOLPROPID_COLOR, (WCHAR *)TEXT("Fill color"), &_pPropColorFill);
+            _pPropColorFill->SetSite(this);
             pEditor->CreateStandardToolProperty(TOOLPROPID_COLOR, (WCHAR *)TEXT("Border color"), &_pPropColorBorder);
+            _pPropColorBorder->SetSite(this);
 
             _fPropsInitialized = true;
-            return S_OK;
+            hr = S_OK;
         }
     }
 
-    return E_PENDING;
+    return hr;
+}
+
+STDMETHODIMP CPropertyProvider::GetSite(REFIID riid, void **ppvSite)
+{
+    if (!ppvSite)
+        return E_POINTER;
+
+    return _pUnkSite->QueryInterface(riid, ppvSite);
+}
+
+STDMETHODIMP CPropertyProvider::SetSite(IUnknown *pUnkSite)
+{
+    _pUnkSite = pUnkSite;
+    HRESULT hr = E_FAIL;
+
+    if (_pUnkSite)
+    {
+        _pUnkSite->Release();
+        _pUnkSite = nullptr;
+    }
+
+    hr = S_OK;
+    return hr;
 }
 
 STDMETHODIMP CPropertyProvider::GetProperties(SAFEARRAY **ppsaProperties)

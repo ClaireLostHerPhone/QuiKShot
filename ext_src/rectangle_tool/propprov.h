@@ -6,6 +6,7 @@ class CPropertyProvider
 {
     static constexpr int c_iNumProperties = 2;
 
+    IUnknown *_pUnkSite;
     IScreenshotEditorToolProperty *_pPropColorFill;
     IScreenshotEditorToolProperty *_pPropColorBorder;
     COLORREF _crFill;
@@ -15,6 +16,12 @@ class CPropertyProvider
     HRESULT _InitializeProperties();
 
 public:
+    IMPLEMENT_IUNKNOWN;
+
+    //@Begin IObjectWithSite
+    STDMETHODIMP SetSite(IUnknown *pUnkSite) override;
+    STDMETHODIMP GetSite(REFIID riid, void **ppvSite) override;
+    //@End IObjectWithSite
 
     //@Begin IScreenshotEditorPropertyProvider
     STDMETHODIMP GetProperties(SAFEARRAY **ppsaProperties) override;

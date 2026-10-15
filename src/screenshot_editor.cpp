@@ -1030,6 +1030,38 @@ LRESULT CEditorToolProperties::v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LP
 
 LRESULT CEditorToolProperties::_OnCreate(CREATESTRUCT *pcs)
 {
+    ASSERT_KEEP(SUCCEEDED(Refresh(nullptr, nullptr)));
+
+    return DefWindowProc(_hwnd, WM_CREATE, 0, (LPARAM)pcs);
+}
+
+LRESULT CEditorToolProperties::_OnDestroy()
+{
+    FOR_EACH_DYNARR(HBITMAP hbm, _vhbmIcons)
+    {
+        DeleteObject(hbm);
+    }
+
+    return DefWindowProc(_hwnd, WM_DESTROY, 0, 0);
+}
+
+LRESULT CEditorToolProperties::_OnCommand(WPARAM wParam, LPARAM lParam)
+{
+    return 0;
+}
+
+LRESULT CEditorToolProperties::_OnNotify(NMHDR *pnmh, WPARAM wParam, bool *pfHandled)
+{
+    return 0;
+}
+
+HRESULT CEditorToolProperties::_CreateToolbar()
+{
+    if (_hwndToolbar)
+    {
+        DestroyWindow(_hwndToolbar);
+    }
+
     _hwndToolbar = CreateWindowEx(
         0,
         TOOLBARCLASSNAME,
@@ -1061,59 +1093,58 @@ LRESULT CEditorToolProperties::_OnCreate(CREATESTRUCT *pcs)
 
     SendMessage(_hwndToolbar, TB_ADDBUTTONS, 1, (LPARAM)rgtbButtons);
 
-    return DefWindowProc(_hwnd, WM_CREATE, 0, (LPARAM)pcs);
+    return E_NOTIMPL;
 }
 
-LRESULT CEditorToolProperties::_OnDestroy()
+HRESULT CEditorToolProperties::_EnumerateProperties(
+    IScreenshotEditorPropertyProvider *pProvider, CDynamicArray<IScreenshotEditorToolProperty *> *pvpProps)
 {
-    FOR_EACH_DYNARR(HBITMAP hbm, _vhbmIcons)
+    SAFEARRAY *psaProps = nullptr;
+    VARTYPE vt;
+
+    if (SUCCEEDED(SafeArrayGetVartype(psaProps, &vt)) && vt == VT_VARIANT && SUCCEEDED(pProvider->GetProperties(&psaProps)))
     {
-        DeleteObject(hbm);
+        LONG lBoundLow = 0;
+        LONG lBoundHigh = 0;
+
+        SafeArrayGetLBound(psaProps, 0, &lBoundLow);
+        SafeArrayGetUBound(psaProps, 0, &lBoundHigh);
+
+        for (LONG i = lBoundLow; i < lBoundHigh; i++)
+        {
+            VARIANT *pvarElement = nullptr;
+            if (SUCCEEDED(SafeArrayGetElement(psaProps, &i, &pvarElement)))
+            {
+                if (pvarElement->vt == VT_UNKNOWN)
+                {
+                    IScreenshotEditorToolProperty *pProperty = nullptr;
+                    if (SUCCEEDED(pvarElement->punkVal->QueryInterface(IID_PPV_ARGS(&pProperty))))
+                    {
+                        pvpProps->Push(pProperty);
+                    }
+                }
+            }
+        }
+
+        SafeArrayDestroy(psaProps);
     }
 
-    return DefWindowProc(_hwnd, WM_DESTROY, 0, 0);
+    return S_OK;
 }
 
-LRESULT CEditorToolProperties::_OnCommand(WPARAM wParam, LPARAM lParam)
+HRESULT CEditorToolProperties::_ClearPropInfo()
 {
-    //WPARAM toolRequested = LOWORD(wParam);
+    FOR_EACH_DYNARR(PropertyInfo &pi, _vPropInfo)
+    {
+        // Since this is a union, it also encompasses pObj.
+        if (pi.owner.pTool)
+            pi.owner.pTool->Release();
 
-    //if (toolRequested == SSET_SHOWCURSOR)
-    //{
-    //    // This tool does not receive selection.
-    //    if (!SendMessage(_hwndToolbar, TB_ISBUTTONCHECKED, SSET_SHOWCURSOR, 0))
-    //    {
-    //        SendMessage(_pEditor->GetHWND(), CScreenshotEditorWindow::WM_SSE_HIDECURSOR, 0, 0);
-    //    }
-    //    else
-    //    {
-    //        SendMessage(_pEditor->GetHWND(), CScreenshotEditorWindow::WM_SSE_SHOWCURSOR, 0, 0);
-    //    }
-    //}
-    //else
-    //{
-    //    SendMessage(_pEditor->GetHWND(), CScreenshotEditorWindow::WM_SSE_CHANGETOOL, toolRequested, 0);
-    //}
+        pi.pProp->Release();
+    }
 
-    return 0;
-}
-
-LRESULT CEditorToolProperties::_OnNotify(NMHDR *pnmh, WPARAM wParam, bool *pfHandled)
-{
-    //if (pnmh->code == TTN_GETDISPINFO)
-    //{
-    //    NMTTDISPINFO *pDispInfo = (NMTTDISPINFO *)pnmh;
-
-    //    TBBUTTONINFO tbbi = { sizeof(tbbi) };
-    //    tbbi.dwMask = TBIF_LPARAM;
-    //    if (SendMessage(_hwndToolbar, TB_GETBUTTONINFO, pDispInfo->hdr.idFrom, (LPARAM)&tbbi) > -1)
-    //    {
-    //        pDispInfo->lpszText = (TCHAR *)tbbi.lParam;
-    //        return 0;
-    //    }
-    //}
-
-    return 0;
+    _vPropInfo.Clear();
+    return S_OK;
 }
 
 // static
@@ -1149,6 +1180,63 @@ CEditorToolProperties *CEditorToolProperties::Create(CScreenshotEditorWindow *pE
     );
 
     return pWnd;
+}
+
+HRESULT CEditorToolProperties::Refresh(IScreenshotEditorTool *pToolSel, IScreenshotEditorObject *pObjSel)
+{
+    _ClearPropInfo();
+
+    IScreenshotEditorPropertyProvider *pPropProTool = nullptr;
+    CDynamicArray<IScreenshotEditorToolProperty *> vpPropsTool;
+    if (pToolSel && SUCCEEDED(pToolSel->QueryInterface(IID_PPV_ARGS(&pPropProTool))))
+    {
+        ASSERT_KEEP(SUCCEEDED(_EnumerateProperties(pPropProTool, &vpPropsTool)));
+        pPropProTool->Release();
+    }
+
+    IScreenshotEditorPropertyProvider *pPropProObj = nullptr;
+    CDynamicArray<IScreenshotEditorToolProperty *> vpPropsObj;
+    if (pObjSel && SUCCEEDED(pObjSel->QueryInterface(IID_PPV_ARGS(&pPropProObj))))
+    {
+        ASSERT_KEEP(SUCCEEDED(_EnumerateProperties(pPropProObj, &vpPropsObj)));
+        pPropProObj->Release();
+    }
+
+    FOR_EACH_DYNARR(IScreenshotEditorToolProperty *pProp, vpPropsTool)
+    {
+        PropertyInfo pi = { 0 };
+        pi.pProp = pProp;
+        pi.ownerType = PROPOWNERT_TOOL;
+        bool fIsValidProperty = SUCCEEDED(pProp->GetSite(IID_PPV_ARGS(&pi.owner.pTool)));
+
+        if (fIsValidProperty)
+        {
+            _vPropInfo.Push(pi);
+        }
+        else
+        {
+            pProp->Release();
+        }
+    }
+
+    FOR_EACH_DYNARR(IScreenshotEditorToolProperty *pProp, vpPropsObj)
+    {
+        PropertyInfo pi = { 0 };
+        pi.pProp = pProp;
+        pi.ownerType = PROPOWNERT_OBJECT;
+        bool fIsValidProperty = SUCCEEDED(pProp->GetSite(IID_PPV_ARGS(&pi.owner.pObj)));
+
+        if (fIsValidProperty)
+        {
+            _vPropInfo.Push(pi);
+        }
+        else
+        {
+            pProp->Release();
+        }
+    }
+
+    return S_OK;
 }
 
 //
@@ -1414,6 +1502,14 @@ CScreenshotEditorRendererGDI::~CScreenshotEditorRendererGDI()
     DeleteObject(_hpenSelect);
     DeleteObject(_hpenSizingHelpers);
     DeleteObject(_hbmScreenshotDimmed);
+    if (_hbmCursor)
+        DeleteObject(_hbmCursor);
+    if (_hbmCursorDimmed)
+        DeleteObject(_hbmCursorDimmed);
+    if (_hbmCursorDimmedNone)
+        DeleteObject(_hbmCursorDimmedNone);
+    if (_hbmCursorNone)
+        DeleteObject(_hbmCursorNone);
 
     if (_bmp.fCopiedScreenshot)
     {
@@ -1584,8 +1680,12 @@ HRESULT CScreenshotEditorRendererGDI::Paint(HDC hdc, RECT *prcPaint)
             prcPaint->left, prcPaint->top,
             SRCCOPY
         );
+    }
 
-        SelectObject(hdcBackbuffer, hObjOldBB);
+    SelectObject(hdcBackbuffer, hObjOldBB);
+
+    if (fUseBackbuffer)
+    {
         DeleteObject(hbmBackbuffer);
         DeleteDC(hdcBackbuffer);
     }
@@ -3338,6 +3438,8 @@ HRESULT CScreenshotEditorWindow::_ChangeTool(ScreenshotEditorTool newTool)
     if (_pToolbar)
         _pToolbar->OnToolChanged(newTool);
 
+    RefreshPropertiesUI();
+
     return S_OK;
 }
 
@@ -3706,6 +3808,7 @@ HRESULT CScreenshotEditorWindow::_SelectObject(IScreenshotEditorObject *pObj)
     if (_pSelectedObject)
         _pSelectedObject->AddRef();
 
+    RefreshPropertiesUI();
     return _pRenderer->ChangeSelectedObject(pObj);
 }
 
@@ -4010,6 +4113,13 @@ bool CScreenshotEditorWindow::IsCursorShown()
     // The architecture is a bit messy here. I might have the editor window track this on its own instead of
     // asking the renderer.
     return _pRenderer->IsCursorShown();
+}
+
+HRESULT CScreenshotEditorWindow::RefreshPropertiesUI()
+{
+    if (!_pToolProps)
+        return E_PENDING;
+    return _pToolProps->Refresh(_pExtTool, _pSelectedObject);
 }
 
 HRESULT CScreenshotEditorWindow::CopyToClipboardAndAccept()
@@ -4576,6 +4686,11 @@ STDMETHODIMP CScreenshotEditorToolPropertyButton::GetValue(VARIANT *pvar)
 }
 
 STDMETHODIMP CScreenshotEditorToolPropertyButton::GetDefaultValue(VARIANT *pvar)
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CScreenshotEditorToolPropertyButton::CreateToolbarItem(HWND hwndToolbar)
 {
     return E_NOTIMPL;
 }

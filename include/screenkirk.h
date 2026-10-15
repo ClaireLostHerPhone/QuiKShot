@@ -274,9 +274,22 @@ DEFINE_GUID(TOOLPROPID_BUTTON,
  * Interface for tool properties, which are GUI controls that control variables that a tool can
  * read from.
  * 
- * The site of a tool property is the owner tool. To get the site of the screenshot editor from a
- * tool property, first get the site of the property to reference the tool, and then get the site
- * of the tool to reference the screenshot editor.
+ * The site of a tool property is the property provider. To get a reference to the screenshot editor
+ * from a tool property, first get the site of the property to reference the provider, then get the
+ * site of the provider to reference the associated tool or object, and finally reference the site
+ * of the owner of the provider to get a reference to the screenshot editor. This is a reliable
+ * chain to access the screenshot editor.
+ * 
+ * The chain goes:
+ *   -> IScreenshotEditorToolProperty
+ *   -> IScreenshotEditorPropertyProvider
+ *   -> IScreenshotEditorTool | IScreenshotEditorObject
+ *   -> IScreenshotEditor
+ * 
+ * Tool properties should implement both a toolbar item and a menu item. The toolbar item will be
+ * displayed on the properties toolbar if enough space is available to do so. If there is not
+ * enough space available, then the menu item will be displayed within an overflow menu. Neither
+ * item is strictly required for functionality, but the lack of both may impair functionality.
  */
 #undef INTERFACE
 #define INTERFACE IScreenshotEditorToolProperty
@@ -285,15 +298,56 @@ DECLARE_INTERFACE_IID_(IScreenshotEditorToolProperty, IObjectWithSite, "{DD03F90
     STDMETHOD(QueryInterface)(THIS_ REFIID riid, OUT void **ppvOut) PURE;
     STDMETHOD_(ULONG, AddRef)(THIS) PURE;
     STDMETHOD_(ULONG, Release)(THIS) PURE;
+    // The implementer must call SetSite with the pointer to the provider. A tool property without
+    // a valid site is formally invalid and will be rejected by the GUI manager.
     STDMETHOD(SetSite)(THIS_ IUnknown *pUnkSite) PURE;
     STDMETHOD(GetSite)(THIS_ REFIID riid, void **ppvSite) PURE;
 
     STDMETHOD(GetLabel)(THIS_ OUT QS_TCHAR **ppszOut) PURE;
     STDMETHOD(GetIcon)(THIS_ OUT HICON *phIcon) PURE;
+
+    /**
+     * Gets the HWND of the tool property.
+     * 
+     * A window can be optionally provided. However, most custom tool properties will want to provide
+     * one, since you can only do buttons with common controls toolbar items.
+     * 
+     * If no window is provided, this function should return E_NOTIMPL.
+     */
+    STDMETHOD(GetHWND)(THIS_ OUT HWND *phwndOut) PURE;
+
+    /**
+     * Creates a toolbar item for the property, to be displayed on a toolbar.
+     *
+     * The user can, instead, create a window which overlaps the toolbar at the desired coordinates.
+     * If the property implementation wishes to do this, it should return said HWND via GetHWND and
+     * return S_FALSE in this method to create a separator as large as the overlapping window. The
+     * toolbar GUI manager will automatically reparent, move, and size the returned HWND to fit the
+     * expected position.
+     */
+    STDMETHOD(CreateToolbarItem)(THIS_ HWND hwndToolbar) PURE;
+
     STDMETHOD(OnClick)(THIS) PURE;
+
+    /**
+     * Creates and appends a menu item for the property, to be displayed in a popup menu.
+     * 
+     * The majority of properties should implement both a toolbar item and a menu item for their
+     * functionality.
+     */
     STDMETHOD(CreateMenuItem)(THIS_ IN HMENU hMenu) PURE;
+
     STDMETHOD(OnClickMenuItem)(THIS) PURE;
+    
+    /**
+     * Called by the GUI manager when laying out items on the toolbar.
+     * 
+     * The input rect contains the amount of free space available on the toolbar for consumption.
+     * The output rect tells the GUI manager how big this specific element will be. The output
+     * rect will be clamped to fit the input rect.
+     */
     STDMETHOD(MeasureToolbar)(THIS_ IN RECT *prcToolbar, IN OUT RECT *prcProperty) PURE;
+
     STDMETHOD(GetValue)(THIS_ VARIANT *pvar) PURE;
     STDMETHOD(GetDefaultValue)(THIS_ VARIANT *pvar) PURE;
 };
@@ -302,22 +356,37 @@ DECLARE_INTERFACE_IID_(IScreenshotEditorToolProperty, IObjectWithSite, "{DD03F90
 DEFINE_GUID(IID_IScreenshotEditorToolProperty, 
     0xdd03f90f, 0xe4a2, 0x4561, 0x8b, 0xc, 0x26, 0x2d, 0xa, 0x7d, 0xf8, 0x7a);
 
+/**
+ * Interface for property providers.
+ * 
+ * Both tools and objects can provide properties. The property GUI will typically show properties for the
+ * currently-selected object if present, and otherwise show properties for the currently-selected tool. A
+ * tool can override this default behavior by providing the flag SSETF_ALWAYSSHOWPROPERTIES, in which case
+ * both will be displayed.
+ * 
+ * Typically, an object's property set should mirror the property set of its associated tool.
+ * 
+ * The site of a property provider will be the owner tool or object. To get a reference to the screenshot
+ * editor (i.e. for the creation of a standard property), get the site of the owner tool or object.
+ */
 #undef INTERFACE
 #define INTERFACE IScreenshotEditorPropertyProvider
-DECLARE_INTERFACE_IID_(IScreenshotEditorPropertyProvider, IUnknown, "{9D9C73E4-62E0-41E1-B1B4-E1EF63E21F28}")
+DECLARE_INTERFACE_IID_(IScreenshotEditorPropertyProvider, IObjectWithSite, "{9D9C73E4-62E0-41E1-B1B4-E1EF63E21F28}")
 {
     STDMETHOD(QueryInterface)(THIS_ REFIID riid, OUT void **ppvOut) PURE;
     STDMETHOD_(ULONG, AddRef)(THIS) PURE;
     STDMETHOD_(ULONG, Release)(THIS) PURE;
+    STDMETHOD(SetSite)(THIS_ IUnknown *pUnkSite) PURE;
+    STDMETHOD(GetSite)(THIS_ REFIID riid, void **ppvSite) PURE;
 
     /**
-    * Gets an array of properties provided by the tool.
-    */
+     * Gets an array of properties provided by the tool.
+     */
     STDMETHOD(GetProperties)(THIS_ SAFEARRAY **ppsaProperties) PURE;
 
     /**
-    * Called when a tool property is changed.
-    */
+     * Called when a tool property is changed.
+     */
     STDMETHOD(OnPropertyChanged)(THIS_ IScreenshotEditorToolProperty *pProperty) PURE;
 };
 
