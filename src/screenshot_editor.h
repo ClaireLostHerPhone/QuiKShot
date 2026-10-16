@@ -407,7 +407,7 @@ public:
     enum EditHistoryActionId
     {
         EHID_SELECTREGION,
-        EHID_OBJECTCREATE,
+        EHID_OBJECTINSERT,
         EHID_OBJECTREMOVE,
         EHID_OBJECTMOVE,
         EHID_OBJECT, // Unique handler for an object.
@@ -686,7 +686,7 @@ protected:
 
     HRESULT _LoadExtensionTools();
 
-    HRESULT _ApplyHistoryState(CEditHistoryManager::EditHistoryData *pehd);
+    HRESULT _ApplyHistoryState(CEditHistoryManager::EditHistoryData *pehd, bool fUndo);
     HRESULT _Undo();
     HRESULT _Redo();
 
@@ -696,7 +696,7 @@ protected:
     HRESULT _ProjectFloatingToolbarPosition(Side sideIn, RECT *prcBox, IN OUT Side *pSidePenetrate, OUT POINT *ptOut);
     void _HideFloatingToolbar();
     void _UpdateCursor();
-    void _CancelSelection();
+    void _CancelSelection(bool fPushHistory);
     int _ComputeDragMode(POINT ptCursor, RECT *prcDraggedObj);
     HRESULT _RemoveObject(IScreenshotEditorObject *pObj);
     IScreenshotEditorObject *_GetMousedOverObject();

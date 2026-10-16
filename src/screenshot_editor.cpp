@@ -2804,7 +2804,7 @@ LRESULT CScreenshotEditorWindow::_OnKeyDown(WPARAM virtualKey, LPARAM lParam)
         {
             if (_fHasAnySelectionMade)
             {
-                _CancelSelection();
+                _CancelSelection(true);
             }
             else
             {
@@ -3101,7 +3101,7 @@ LRESULT CScreenshotEditorWindow::_OnMouseLButtonUp(int x, int y, WPARAM flags)
         }
         else
         {
-            _CancelSelection();
+            _CancelSelection(true);
         }
     }
 
@@ -3142,7 +3142,7 @@ LRESULT CScreenshotEditorWindow::_OnMouseRButtonDown(int x, int y, WPARAM flags)
     if (_tool == SSET_SELECT && _fIsSelectingRegion)
     {
         ReleaseCapture();
-        _CancelSelection();
+        _CancelSelection(false);
         _fIsSelectingRegion = false;
         _ptSelectionOrigin.x = 0;
         _ptSelectionOrigin.y = 0;
@@ -3303,23 +3303,28 @@ HRESULT CScreenshotEditorWindow::_LoadExtensionTools()
     return S_OK;
 }
 
-HRESULT CScreenshotEditorWindow::_ApplyHistoryState(CEditHistoryManager::EditHistoryData *pehd)
+HRESULT CScreenshotEditorWindow::_ApplyHistoryState(CEditHistoryManager::EditHistoryData *pehd, bool fUndo)
 {
     _pHistoryMgr->Lock();
     HRESULT hr = S_OK;
 
     if (pehd->idAction == CEditHistoryManager::EHID_SELECTREGION)
     {
-        _rcSelection = pehd->data.selection.rcRegionNew;
-        _pRenderer->UpdateSelection(&_rcSelection);
+        SetSelectedRegion(&pehd->data.selection.rcRegionNew);
     }
-    else if (pehd->idAction == CEditHistoryManager::EHID_OBJECTCREATE)
+    else if (pehd->idAction == CEditHistoryManager::EHID_OBJECTINSERT)
     {
-        hr = InsertObject(pehd->data.pObject);
+        if (!fUndo)
+            hr = InsertObject(pehd->data.pObject);
+        else
+            hr = _RemoveObject(pehd->data.pObject);
     }
     else if (pehd->idAction == CEditHistoryManager::EHID_OBJECTREMOVE)
     {
-        hr = _RemoveObject(pehd->data.pObject);
+        if (!fUndo)
+            hr = _RemoveObject(pehd->data.pObject);
+        else
+            hr = InsertObject(pehd->data.pObject);
     }
     else if (pehd->idAction == CEditHistoryManager::EHID_OBJECTMOVE)
     {
@@ -3344,7 +3349,7 @@ HRESULT CScreenshotEditorWindow::_Undo()
             _pHistoryMgr->Lock();
 
             // Invert the current case (if necessary):
-            if (ehdCur.idAction == CEditHistoryManager::EHID_OBJECTCREATE)
+            if (ehdCur.idAction == CEditHistoryManager::EHID_OBJECTINSERT)
             {
                 // Remove the object if it was added.
                 _RemoveObject(ehdCur.data.pObject);
@@ -3360,7 +3365,7 @@ HRESULT CScreenshotEditorWindow::_Undo()
             }
 
             // Apply the previous case:
-            hr = _ApplyHistoryState(&ehd); // Unlocks the history manager for us.
+            hr = _ApplyHistoryState(&ehd, true); // Unlocks the history manager for us.
             _pHistoryMgr->Rewind();
         }
     }
@@ -3374,7 +3379,7 @@ HRESULT CScreenshotEditorWindow::_Redo()
     HRESULT hr = _pHistoryMgr->GetNext(&ehd);
     if (SUCCEEDED(hr))
     {
-        hr = _ApplyHistoryState(&ehd);
+        hr = _ApplyHistoryState(&ehd, false);
         _pHistoryMgr->Progress();
     }
 
@@ -3698,7 +3703,7 @@ void CScreenshotEditorWindow::_UpdateCursor()
     SetCursor(hcur);
 }
 
-void CScreenshotEditorWindow::_CancelSelection()
+void CScreenshotEditorWindow::_CancelSelection(bool fPushHistory)
 {
     RECT rcSelectionOld = _rcSelection;
     _rcSelection.left = _rcSelection.top = _rcSelection.right = _rcSelection.bottom = 0;
@@ -3706,6 +3711,8 @@ void CScreenshotEditorWindow::_CancelSelection()
     _pRenderer->UpdateSelection(&_rcSelection);
     _HideFloatingToolbar();
     _DoPreviewSelection(_pHoveredObj);
+    if (fPushHistory)
+        _pHistoryMgr->PushSelectRegion(&_rcSelection);
 }
 
 int CScreenshotEditorWindow::_ComputeDragMode(POINT ptCursor, RECT *prcDraggedObj)
@@ -4060,6 +4067,7 @@ STDMETHODIMP CScreenshotEditorWindow::SetSelectedRegion(RECT *prc)
         ASSERT_KEEP(SUCCEEDED(_pRenderer->UpdateSelection(&rcZero)));
         _fHasAnySelectionMade = false;
     }
+    _pHistoryMgr->PushSelectRegion(&_rcSelection);
     return S_OK;
 }
 
@@ -4363,7 +4371,7 @@ HRESULT CEditHistoryManager::_DestroyEntry(int idxEntry)
 
     IScreenshotEditorObject *pEditorObj = nullptr;
 
-    if (ehd.idAction == EHID_OBJECTCREATE || ehd.idAction == EHID_OBJECTREMOVE)
+    if (ehd.idAction == EHID_OBJECTINSERT || ehd.idAction == EHID_OBJECTREMOVE)
     {
         if (ehd.data.pObject)
             pEditorObj = ehd.data.pObject;
@@ -4382,7 +4390,7 @@ HRESULT CEditHistoryManager::_DestroyEntry(int idxEntry)
     if (pEditorObj)
     {
 #ifdef _DEBUG
-        if (ehd.idAction == EHID_OBJECTCREATE)
+        if (ehd.idAction == EHID_OBJECTINSERT)
         {
             HWND hwndEditor = FindWindow(CScreenshotEditorWindow::GetWindowClass(), nullptr);
             CScreenshotEditorWindow *pEditor = (CScreenshotEditorWindow *)GetWindowLongPtr(hwndEditor, 0);
@@ -4429,7 +4437,7 @@ HRESULT CEditHistoryManager::PushObjectCreate(IScreenshotEditorObject *pObj)
         return E_ACCESSDENIED;
 
     EditHistoryData ehd;
-    ehd.idAction = EHID_OBJECTCREATE;
+    ehd.idAction = EHID_OBJECTINSERT;
     ehd.data.pObject = pObj;
     pObj->AddRef();
 
