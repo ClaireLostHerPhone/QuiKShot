@@ -3135,6 +3135,8 @@ LRESULT CScreenshotEditorWindow::_OnMouseLButtonUp(int x, int y, WPARAM flags)
 
 LRESULT CScreenshotEditorWindow::_OnMouseRButtonDown(int x, int y, WPARAM flags)
 {
+    bool fDisablePopupMenu = false;
+
     // If the user right clicks while selecting a region, then cancel the selection.
     // This is similar to ShareX.
     if (_tool == SSET_SELECT && _fIsSelectingRegion)
@@ -3144,6 +3146,7 @@ LRESULT CScreenshotEditorWindow::_OnMouseRButtonDown(int x, int y, WPARAM flags)
         _fIsSelectingRegion = false;
         _ptSelectionOrigin.x = 0;
         _ptSelectionOrigin.y = 0;
+        fDisablePopupMenu = true;
     }
     else if (_IsExtensionTool())
     {
@@ -3155,7 +3158,7 @@ LRESULT CScreenshotEditorWindow::_OnMouseRButtonDown(int x, int y, WPARAM flags)
     }
     
     IScreenshotEditorObject *pObjHover = _GetMousedOverObject();
-    if (!_fIsSelectingRegion && pObjHover)
+    if (!_fIsSelectingRegion && !fDisablePopupMenu && pObjHover)
     {
         HMENU hMenu = CreatePopupMenu();
         if (hMenu)
