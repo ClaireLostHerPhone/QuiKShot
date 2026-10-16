@@ -1653,7 +1653,7 @@ HRESULT CScreenshotEditorRendererGDI::Paint(HDC hdc, RECT *prcPaint)
         }
     }
     
-    if (!_bmp.fRender && _bmp.fHasAnySelectionMade || _bmp.fPreviewSelection)
+    if (!_bmp.fRender && (_bmp.fHasAnySelectionMade || _bmp.fPreviewSelection))
     {
         HDC hdcSelection = fUseBackbuffer
             ? hdcBackbuffer
