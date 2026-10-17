@@ -2768,6 +2768,15 @@ LRESULT CScreenshotEditorWindow::_OnDestroy()
         _RemoveObject(_vObjs[i]);
     }
 
+    FOR_EACH_DYNARR(ExtensionToolInfo &eti, _vExtToolInfo)
+    {
+        if (eti.pTool)
+        {
+            eti.pTool->SetSite(nullptr);
+            eti.pTool->Release();
+        }
+    }
+
     if (_pHistoryMgr)
         delete _pHistoryMgr;
     if (_pRenderer)
@@ -3093,7 +3102,7 @@ LRESULT CScreenshotEditorWindow::_OnMouseLButtonUp(int x, int y, WPARAM flags)
     if (_tool == SSET_SELECT && (x == _ptSelectionOrigin.x && y == _ptSelectionOrigin.y))
     {
         IScreenshotEditorObject *pObjHover = _GetMousedOverObject();
-        if (pObjHover)
+        if (pObjHover && (pObjHover->GetFlags() & SSEOF_SELECTIONTEMPLATE))
         {
             RECT rcSelection;
             ASSERT_KEEP(SUCCEEDED(pObjHover->GetLogicalRect(&rcSelection)));
@@ -3361,7 +3370,7 @@ HRESULT CScreenshotEditorWindow::_Undo()
             }
             else if (ehdCur.idAction == CEditHistoryManager::EHID_OBJECTMOVE)
             {
-                ehdCur.data.objectMove.pObject->Move(&ehdCur.data.objectMove.rcOld);
+                //ehdCur.data.objectMove.pObject->Move(&ehdCur.data.objectMove.rcOld);
             }
 
             // Apply the previous case:

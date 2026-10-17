@@ -35,7 +35,8 @@ public:
     //@End IScreenshotEditorTool
 
     CObjectDebugTool()
-        : _pUnkSite(nullptr)
+        : _uRefCount(0)
+        , _pUnkSite(nullptr)
         , _pEditor(nullptr)
         , _pWnd(nullptr)
     {
