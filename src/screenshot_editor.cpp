@@ -1770,6 +1770,8 @@ HRESULT CScreenshotEditorRendererGDI::UpdateSelection(RECT *prcNew)
 
     bool fOldSelectionState = _bmp.fHasAnySelectionMade;
     _bmp.fHasAnySelectionMade = RECTWIDTH(_rcSelection) > 0 || RECTHEIGHT(_rcSelection) > 0;
+    if (_bmp.fPreviewSelection && _bmp.fHasAnySelectionMade)
+        _bmp.fPreviewSelection = false;
 
     if (fOldSelectionState != _bmp.fHasAnySelectionMade)
     {
@@ -4102,7 +4104,7 @@ static inline HRESULT CreateStandardToolPropertyT(TCHAR *pszLabel, OUT IScreensh
     else
     {
         delete pInst;
-        return E_FAIL;
+        return E_NOINTERFACE;
     }
 }
 
@@ -4233,8 +4235,8 @@ CScreenshotEditorWindow *CScreenshotEditorWindow::CreateAndShow(CScreenshotConte
     }
 
     CScreenshotEditorWindow *pWnd = CWindow::Create(
-        // We apply topmost temporarily during window creation to prevent anything
-        // from being captured under it. Topmost status is cleared pretty quickly
+        // We apply topmost temporarily during window creation to prevent any other
+        // windows from sticking above it. Topmost status is cleared pretty quickly
         // since topmost fullscreen overlay windows are incredibly annoying.
         WS_EX_TOPMOST,
         TEXT("Screenshot Editor - screenkirk"),
