@@ -53,12 +53,12 @@ public:
         return _vWndPos.GetSize() > 0;
     }
 
-    typedef HRESULT (*OnGetWindowPositionsCB)();
+    typedef HRESULT (CALLBACK *OnGetWindowPositionsCB)(void *pvData);
 
     /**
      * Gets all window positions on the desktop.
      */
-    HRESULT GetWindowPositions(OnGetWindowPositionsCB cb);
+    HRESULT GetWindowPositions(OnGetWindowPositionsCB cb, void *pvCbData);
 
     HRESULT Crop(RECT *prcCrop);
     HRESULT CopyToClipboard();

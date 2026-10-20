@@ -940,9 +940,60 @@ HRESULT CSaveImage::_EncodeWIC(GUID *pEncoderGuid, char **ppcData, int *pcbData)
 #endif
 }
 
-HRESULT CScreenshotContext::GetWindowPositions(OnGetWindowPositionsCB cb)
+static void GetWindowPositionData(HWND hwnd, CDynamicArray<WindowPositionRecord> *pvWndPos)
 {
-    return E_NOTIMPL;
+    WindowPositionRecord wpr = { 0 };
+
+    DWORD dwExStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+    DWORD dwStyle = GetWindowLong(hwnd, GWL_STYLE);
+
+    if (!(dwStyle & WS_VISIBLE))
+        return;
+
+    GetClassName(hwnd, wpr.szWindowClass, ARRAYSIZE(wpr.szWindowClass));
+    
+    // N.B. This makes it impossible to capture another screenshot editor with the screenshot editor.
+    // However, that might be for the better.
+    if (_tcscmp(wpr.szWindowClass, TEXT("screenkirk_ScreenshotEditorWindow")) == 0)
+        return;
+
+    // TODO: Support other banned window classes.
+
+    wpr.hwnd = hwnd;
+    wpr.hwndParent = GetParent(hwnd);
+    wpr.dwExStyle = dwExStyle;
+    wpr.dwStyle = dwStyle;
+
+    GetWindowRect(hwnd, &wpr.rcNonclient);
+    GetClientRect(hwnd, &wpr.rcClient);
+    MapWindowPoints(hwnd, HWND_DESKTOP, (POINT *)&wpr.rcClient, 2);
+
+    pvWndPos->Push(wpr);
+}
+
+static BOOL CALLBACK EnumChildWindowsProc(HWND hwnd, LPARAM lParam)
+{
+    CDynamicArray<WindowPositionRecord> *pvWndPos = (CDynamicArray<WindowPositionRecord> *)lParam;
+    GetWindowPositionData(hwnd, pvWndPos);
+
+    return TRUE;
+}
+
+static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam)
+{
+    CDynamicArray<WindowPositionRecord> *pvWndPos = (CDynamicArray<WindowPositionRecord> *)lParam;
+    GetWindowPositionData(hwnd, pvWndPos);
+
+    EnumChildWindows(hwnd, EnumChildWindowsProc, lParam);
+
+    return TRUE;
+}
+
+HRESULT CScreenshotContext::GetWindowPositions(OnGetWindowPositionsCB cb, void *pvCbData)
+{
+    EnumWindows(EnumWindowsProc, (LPARAM)&_vWndPos);
+    cb(pvCbData);
+    return S_OK;
 }
 
 HRESULT CScreenshotContext::_EnsureModificationBuffer()

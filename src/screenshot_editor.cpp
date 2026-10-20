@@ -2697,10 +2697,7 @@ LRESULT CScreenshotEditorWindow::v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, 
 
         case WM_SSE_GETWINDOWPOSITIONS:
         {
-            _fEnumeratedWindows = true;
-
-            // Update the cursor now that enumeration is complete.
-            _UpdateCursor();
+            _HandleGetWindowPositions();
             return 0;
         }
 
@@ -2759,6 +2756,11 @@ LRESULT CScreenshotEditorWindow::_OnCreate(CREATESTRUCT *pcs)
     ASSERT_KEEP(SUCCEEDED(_LoadExtensionTools()));
 
     ASSERT_KEEP(SUCCEEDED(_BuildSelectionTemplatesForMonitors()));
+
+    if (FAILED(_BeginGetWindowPositions()))
+    {
+        _fEnumeratedWindows = true;
+    }
 
     return DefWindowProc(_hwnd, WM_CREATE, 0, (LPARAM)pcs);
 }
@@ -3219,6 +3221,78 @@ LRESULT CScreenshotEditorWindow::_OnMouseRButtonUp(int x, int y, WPARAM flags)
     return 0;
 }
 
+// static
+DWORD WINAPI CScreenshotEditorWindow::GetWindowPositionsThreadProc(void *lpParameter)
+{
+    CScreenshotEditorWindow *pThis = (CScreenshotEditorWindow *)lpParameter;
+    pThis->_pScreenshotCtx->GetWindowPositions(_OnGetWindowPositions, pThis->GetHWND());
+    return 0;
+}
+
+HRESULT CScreenshotEditorWindow::_BeginGetWindowPositions()
+{
+    if (!CreateThread(nullptr, 0, GetWindowPositionsThreadProc, this, 0, nullptr))
+        return E_FAIL;
+    return S_OK;
+}
+
+HRESULT CScreenshotEditorWindow::_HandleGetWindowPositions()
+{
+    CDynamicArray<WindowPositionRecord> &vWndPos = _pScreenshotCtx->_vWndPos;
+
+    _pHistoryMgr->Lock();
+
+    // The array of window positions is from highest z-index to lowest, however we want to create
+    // the template objects from lowest to highest, so we enumerate backwards.
+    for (int i = vWndPos.GetSize() - 1; i >= 0; i--)
+    {
+        WindowPositionRecord &wpr = vWndPos[i];
+
+        CScreenshotEditorSelectionTemplateObject *pSelTemplNC = new (std::nothrow) CScreenshotEditorSelectionTemplateObject();
+        if (pSelTemplNC)
+        {
+            RECT rc = wpr.rcNonclient;
+            MapWindowRect(HWND_DESKTOP, _hwnd, &rc);
+            
+            pSelTemplNC->Move(&rc);
+            if (FAILED(InsertObject(pSelTemplNC)))
+                delete pSelTemplNC;
+        }
+
+        bool fHasNonClientArea =
+            wpr.dwStyle & WS_CAPTION ||
+            wpr.dwStyle & WS_THICKFRAME ||
+            wpr.dwStyle & WS_BORDER ||
+            wpr.dwStyle & WS_VSCROLL ||
+            wpr.dwStyle & WS_HSCROLL;
+
+        // We only create a separate client-area object if the object has a distinct non-client area.
+        // Otherwise, the nonclient area object already includes the client-area-only window, so it
+        // would just result in duplication.
+        if (fHasNonClientArea)
+        {
+            CScreenshotEditorSelectionTemplateObject *pSelTemplClient = new (std::nothrow) CScreenshotEditorSelectionTemplateObject();
+            if (pSelTemplClient)
+            {
+                RECT rc = wpr.rcClient;
+                MapWindowRect(HWND_DESKTOP, _hwnd, &rc);
+
+                pSelTemplClient->Move(&rc);
+                if (FAILED(InsertObject(pSelTemplClient)))
+                    delete pSelTemplClient;
+            }
+        }
+    }
+
+    _pHistoryMgr->Unlock();
+
+    _fEnumeratedWindows = true;
+
+    // Update the cursor now that enumeration is complete.
+    _UpdateCursor();
+    return S_OK;
+}
+
 HRESULT CScreenshotEditorWindow::_ApplyChangesToImage()
 {
     if (!_fHasAnySelectionMade)
@@ -3652,16 +3726,14 @@ void CScreenshotEditorWindow::_UpdateCursor()
 {
     TCHAR *idc = IDC_ARROW;
 
-#if 0 // Not yet implemented
     if (!_fEnumeratedWindows)
     {
         // We show the wait cursor while windows are still being enumerated,
         // since automatic selections will not work until then. Manual selections
         // can still be made.
-        idc = IDC_WAIT;
+        idc = IDC_APPSTARTING;
     }
     else
-#endif
     {
         if (_IsExtensionTool())
         {
