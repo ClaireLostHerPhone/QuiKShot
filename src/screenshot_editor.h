@@ -345,10 +345,11 @@ class CScreenshotEditorRendererGDI
     HRESULT _StartSelectionMarqueeTimer();
     HRESULT _EndSelectionMarqueeTimer();
     HRESULT _DrawMarqueeDottedRectangle(HDC hdc, RECT *prc);
-    HRESULT _MakeDimmedScreenshot();
-    HRESULT _DimScreenshot32BPP();
-    HRESULT _DimScreenshot24BPP();
-    HRESULT _DitherScreenshot(BITMAP *pbm);
+    HRESULT _MakeDimmedScreenshot(HBITMAP hbmSrc, SIZE bmpDimensions, OUT HBITMAP *phbmOut);
+    HRESULT _DimScreenshot32BPPAlpha(HBITMAP hbmSrc, SIZE bmpDimensions, OUT HBITMAP *phbmOut);
+    HRESULT _DimScreenshot32BPP(HBITMAP hbmSrc, SIZE bmpDimensions, OUT HBITMAP *phbmOut);
+    HRESULT _DimScreenshot24BPP(HBITMAP hbmSrc, SIZE bmpDimensions, OUT HBITMAP *phbmOut);
+    HRESULT _DitherScreenshot(BITMAP *pbm, HBITMAP hbmSrc, SIZE bmpDimensions, OUT HBITMAP *phbmOut);
     HRESULT _FindRenderObjectFromInterfaceObject(
         IScreenshotEditorObject *pIfaceObj, OUT CRenderObject **ppRenderObjOut, OUT int *pIdxOut = nullptr);
     HBITMAP _MakeHideCursorBuffer(HBITMAP hbm);

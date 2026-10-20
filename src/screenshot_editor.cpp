@@ -23,10 +23,9 @@ static HRESULT GetAdjustedObjectVisualRect(IScreenshotEditorObject *pObj, RECT *
     return E_FAIL;
 }
 
-template <int T_iBackgroundColor, bool T_fForComCtl>
-static HBITMAP IconToBitmapT(HICON hicon)
+static HBITMAP IconToBitmap(HICON hicon, int iBackgroundColor, bool fForComCtl)
 {
-    if (T_fForComCtl && GetCommonControlsVersion().dwMajorVersion >= 6)
+    if (fForComCtl && GetCommonControlsVersion().dwMajorVersion >= 6)
     {
         return HICONToHBITMAP(hicon);
     }
@@ -40,7 +39,7 @@ static HBITMAP IconToBitmapT(HICON hicon)
         HBITMAP hbm = CreateCompatibleBitmap(hdcDesktop, cxIcon, cyIcon);
         HGDIOBJ hbmOld = SelectObject(hdc, hbm);
 
-        HBRUSH hbr = GetSysColorBrush(T_iBackgroundColor);
+        HBRUSH hbr = GetSysColorBrush(iBackgroundColor);
 
         RECT rcIcon = { 0 };
         rcIcon.right = cxIcon;
@@ -60,12 +59,12 @@ static HBITMAP IconToBitmapT(HICON hicon)
 
 static HBITMAP ToolbarIconToBitmap(HICON hicon)
 {
-    return IconToBitmapT<COLOR_BTNFACE, true>(hicon);
+    return IconToBitmap(hicon, COLOR_BTNFACE, true);
 }
 
 static HBITMAP MenuIconToBitmap(HICON hicon)
 {
-    return IconToBitmapT<COLOR_MENU, false>(hicon);
+    return IconToBitmap(hicon, COLOR_MENU, false);
 }
 
 //
@@ -1530,11 +1529,11 @@ HRESULT CScreenshotEditorRendererGDI::Initialize()
     );
     cursorRenderer.RenderCursor(&_hbmCursor, &_rcCursor);
 
-    HRESULT hr = _MakeDimmedScreenshot();
+    HRESULT hr = _MakeDimmedScreenshot(_hbmScreenshotLight, _pScreenshotCtx->_sizeDesktop, &_hbmScreenshotDimmed);
     _hpenSelect = CreatePen(PS_DOT, 1, RGB(128, 128, 128));
     _hpenSizingHelpers = CreatePen(PS_SOLID, 1, RGB(128, 128, 128));
 
-    ASSERT_KEEP(SUCCEEDED(_MakeHideCursorBuffers()));
+    ASSERT_KEEP(SUCCEEDED(_MakeCursorBuffers()));
 
     bool fShowCursor = true;
     if (FAILED(CConfigManager::GetInstance()->GetBool(TEXT("HideCursorByDefault"), &fShowCursor)))
@@ -1765,7 +1764,6 @@ HRESULT CScreenshotEditorRendererGDI::UpdateSelection(RECT *prcNew)
     
     RECT rcUnion;
     UnionRect(&rcUnion, &rcSelectionOld, &_rcSelectionVisual);
-    //InflateRect(&rcUnion, 2, 2);
     InvalidateRect(_hwndRenderTarget, &rcUnion, FALSE);
 
     bool fOldSelectionState = _bmp.fHasAnySelectionMade;
@@ -2197,22 +2195,30 @@ HRESULT CScreenshotEditorRendererGDI::_DrawMarqueeDottedRectangle(HDC hdc, RECT 
     return S_OK;
 }
 
-HRESULT CScreenshotEditorRendererGDI::_MakeDimmedScreenshot()
+HRESULT CScreenshotEditorRendererGDI::_MakeDimmedScreenshot(HBITMAP hbmSrc, SIZE bmpDimensions, OUT HBITMAP *phbmOut)
 {
+    if (*phbmOut)
+        DeleteObject(*phbmOut);
+
     BITMAP bm = { 0 };
     if (GetObject(_pScreenshotCtx->_hbmScreenshot, sizeof(bm), &bm))
     {
         if (bm.bmBitsPixel == 32)
         {
-            return _DimScreenshot32BPP();
+            if (PortableIsAlphaBlendAvailable())
+            {
+                return _DimScreenshot32BPPAlpha(hbmSrc, bmpDimensions, phbmOut);
+            }
+
+            return _DimScreenshot32BPP(hbmSrc, bmpDimensions, phbmOut);
         }
         else if (bm.bmBitsPixel == 24)
         {
-            return _DimScreenshot24BPP();
+            return _DimScreenshot24BPP(hbmSrc, bmpDimensions, phbmOut);
         }
         else
         {
-            return _DitherScreenshot(&bm);
+            return _DitherScreenshot(&bm, hbmSrc, bmpDimensions, phbmOut);
         }
     }
 
@@ -2220,7 +2226,67 @@ HRESULT CScreenshotEditorRendererGDI::_MakeDimmedScreenshot()
     return E_FAIL;
 }
 
-HRESULT CScreenshotEditorRendererGDI::_DimScreenshot32BPP()
+// Faster rendering technique than with the non-alpha-blended approach.
+HRESULT CScreenshotEditorRendererGDI::_DimScreenshot32BPPAlpha(HBITMAP hbmSrc, SIZE bmpDimensions, OUT HBITMAP *phbmOut)
+{
+    HDC hdcDesktop = GetDC(HWND_DESKTOP);
+    if (hdcDesktop)
+    {
+        HDC hdcDimmed = CreateCompatibleDC(hdcDesktop);
+        HDC hdcBlack = CreateCompatibleDC(hdcDesktop);
+        if (hdcDimmed && hdcBlack)
+        {
+            if (SUCCEEDED(CopyBitmap(phbmOut, hbmSrc, nullptr)))
+            {
+                HGDIOBJ hBitmapDimmedOld = SelectObject(hdcDimmed, *phbmOut);
+
+                HBITMAP hBitmapBlack = CreateCompatibleBitmap(hdcDesktop, 16, 16);
+                HGDIOBJ hBitmapBlackOld = SelectObject(hdcBlack, hBitmapBlack);
+
+                // Prepare the black DC:
+                HGDIOBJ hBrushOld = SelectObject(hdcBlack, GetStockObject(BLACK_BRUSH));
+                HGDIOBJ hPenOld = SelectObject(hdcBlack, GetStockObject(BLACK_PEN));
+                Rectangle(hdcBlack, 0, 0, 16, 16);
+
+                // Alpha blend the black DC into our image at the desired opacity:
+                BLENDFUNCTION bf = { 0 };
+                bf.BlendOp = AC_SRC_OVER;
+                bf.AlphaFormat = 0;
+                bf.BlendFlags = 0;
+                bf.SourceConstantAlpha = 255 - c_iDimAmount;
+
+                PortableAlphaBlend(
+                    hdcDimmed,
+                    0, 0,
+                    bmpDimensions.cx, bmpDimensions.cy,
+                    hdcBlack,
+                    0, 0,
+                    16, 16,
+                    bf
+                );
+
+                SelectObject(hdcBlack, hPenOld);
+                SelectObject(hdcBlack, hBrushOld);
+
+                SelectObject(hdcBlack, hBitmapBlackOld);
+                DeleteObject(hBitmapBlack);
+
+                SelectObject(hdcDimmed, hBitmapDimmedOld);
+            }
+            
+        }
+
+        if (hdcBlack)
+            DeleteDC(hdcBlack);
+        if (hdcDimmed)
+            DeleteDC(hdcDimmed);
+        ReleaseDC(HWND_DESKTOP, hdcDesktop);
+    }
+
+    return S_OK;
+}
+
+HRESULT CScreenshotEditorRendererGDI::_DimScreenshot32BPP(HBITMAP hbmSrc, SIZE bmpDimensions, OUT HBITMAP *phbmOut)
 {
     HDC hdcDesktop = GetDC(HWND_DESKTOP);
     if (hdcDesktop)
@@ -2230,28 +2296,28 @@ HRESULT CScreenshotEditorRendererGDI::_DimScreenshot32BPP()
         {
             BITMAPINFO bmi = { 0 };
             bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
-            bmi.bmiHeader.biWidth = _pScreenshotCtx->_sizeDesktop.cx;
-            bmi.bmiHeader.biHeight = -_pScreenshotCtx->_sizeDesktop.cy;
+            bmi.bmiHeader.biWidth = bmpDimensions.cx;
+            bmi.bmiHeader.biHeight = -bmpDimensions.cy;
             bmi.bmiHeader.biPlanes = 1;
             bmi.bmiHeader.biBitCount = 32;
             bmi.bmiHeader.biCompression = BI_RGB;
             bmi.bmiHeader.biSizeImage = 0;
 
             void *pvPixels = nullptr;
-            _hbmScreenshotDimmed = CreateDIBSection(hdcDimmed, &bmi, DIB_RGB_COLORS, &pvPixels, nullptr, 0);
-            if (_hbmScreenshotDimmed)
+            *phbmOut = CreateDIBSection(hdcDimmed, &bmi, DIB_RGB_COLORS, &pvPixels, nullptr, 0);
+            if (*phbmOut)
             {
-                HGDIOBJ hObjOld = SelectObject(hdcDimmed, _hbmScreenshotDimmed);
+                HGDIOBJ hObjOld = SelectObject(hdcDimmed, *phbmOut);
 
                 HDC hdcOrig = CreateCompatibleDC(hdcDesktop);
-                HGDIOBJ hObjOld2 = SelectObject(hdcOrig, _pScreenshotCtx->_hbmScreenshot);
+                HGDIOBJ hObjOld2 = SelectObject(hdcOrig, hbmSrc);
 
-                BitBlt(hdcDimmed, 0, 0, _pScreenshotCtx->_sizeDesktop.cx, _pScreenshotCtx->_sizeDesktop.cy, hdcOrig, 0, 0, SRCCOPY);
+                BitBlt(hdcDimmed, 0, 0, bmpDimensions.cx, bmpDimensions.cy, hdcOrig, 0, 0, SRCCOPY);
 
                 SelectObject(hdcOrig, hObjOld2);
                 DeleteDC(hdcOrig);
 
-                int cLength = _pScreenshotCtx->_sizeDesktop.cx * _pScreenshotCtx->_sizeDesktop.cy;
+                int cLength = bmpDimensions.cx * bmpDimensions.cy;
                 ULONG *pulSrc = (ULONG *)pvPixels;
                 for (int i = cLength - 1; i >= 0; i--)
                 {
@@ -2278,7 +2344,7 @@ HRESULT CScreenshotEditorRendererGDI::_DimScreenshot32BPP()
     return S_OK;
 }
 
-HRESULT CScreenshotEditorRendererGDI::_DimScreenshot24BPP()
+HRESULT CScreenshotEditorRendererGDI::_DimScreenshot24BPP(HBITMAP hbmSrc, SIZE bmpDimensions, OUT HBITMAP *phbmOut)
 {
     HDC hdcDesktop = GetDC(HWND_DESKTOP);
     if (hdcDesktop)
@@ -2288,29 +2354,29 @@ HRESULT CScreenshotEditorRendererGDI::_DimScreenshot24BPP()
         {
             BITMAPINFO bmi = { 0 };
             bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
-            bmi.bmiHeader.biWidth = _pScreenshotCtx->_sizeDesktop.cx;
-            bmi.bmiHeader.biHeight = -_pScreenshotCtx->_sizeDesktop.cy;
+            bmi.bmiHeader.biWidth = bmpDimensions.cx;
+            bmi.bmiHeader.biHeight = -bmpDimensions.cy;
             bmi.bmiHeader.biPlanes = 1;
             bmi.bmiHeader.biBitCount = 24;
             bmi.bmiHeader.biCompression = BI_RGB;
             bmi.bmiHeader.biSizeImage = 0;
 
             void *pvPixels = nullptr;
-            _hbmScreenshotDimmed = CreateDIBSection(hdcDimmed, &bmi, DIB_RGB_COLORS, &pvPixels, nullptr, 0);
-            if (_hbmScreenshotDimmed)
+            *phbmOut = CreateDIBSection(hdcDimmed, &bmi, DIB_RGB_COLORS, &pvPixels, nullptr, 0);
+            if (*phbmOut)
             {
-                HGDIOBJ hObjOld = SelectObject(hdcDimmed, _hbmScreenshotDimmed);
+                HGDIOBJ hObjOld = SelectObject(hdcDimmed, *phbmOut);
 
                 HDC hdcOrig = CreateCompatibleDC(hdcDesktop);
-                HGDIOBJ hObjOld2 = SelectObject(hdcOrig, _pScreenshotCtx->_hbmScreenshot);
+                HGDIOBJ hObjOld2 = SelectObject(hdcOrig, hbmSrc);
 
-                BitBlt(hdcDimmed, 0, 0, _pScreenshotCtx->_sizeDesktop.cx, _pScreenshotCtx->_sizeDesktop.cy, hdcOrig, 0, 0, SRCCOPY);
+                BitBlt(hdcDimmed, 0, 0, bmpDimensions.cx, bmpDimensions.cy, hdcOrig, 0, 0, SRCCOPY);
 
                 SelectObject(hdcOrig, hObjOld2);
                 DeleteDC(hdcOrig);
 
-                int iWidth = _pScreenshotCtx->_sizeDesktop.cx;
-                int iHeight = _pScreenshotCtx->_sizeDesktop.cy;
+                int iWidth = bmpDimensions.cx;
+                int iHeight = bmpDimensions.cy;
 
                 // Pad the number of bytes to a 4-byte boundary.
                 int iStride = ((iWidth * 24 + 31) & ~31) >> 3;
@@ -2354,7 +2420,7 @@ HRESULT CScreenshotEditorRendererGDI::_DimScreenshot24BPP()
     return S_OK;
 }
 
-HRESULT CScreenshotEditorRendererGDI::_DitherScreenshot(BITMAP *pbm)
+HRESULT CScreenshotEditorRendererGDI::_DitherScreenshot(BITMAP *pbm, HBITMAP hbmSrc, SIZE bmpDimensions, OUT HBITMAP *phbmOut)
 {
     HDC hdcDesktop = GetDC(HWND_DESKTOP);
     if (hdcDesktop)
@@ -2364,24 +2430,24 @@ HRESULT CScreenshotEditorRendererGDI::_DitherScreenshot(BITMAP *pbm)
         {
             BITMAPINFO bmi = { 0 };
             bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
-            bmi.bmiHeader.biWidth = _pScreenshotCtx->_sizeDesktop.cx;
-            bmi.bmiHeader.biHeight = -_pScreenshotCtx->_sizeDesktop.cy;
+            bmi.bmiHeader.biWidth = bmpDimensions.cx;
+            bmi.bmiHeader.biHeight = -bmpDimensions.cy;
             bmi.bmiHeader.biPlanes = 1;
             bmi.bmiHeader.biBitCount = pbm->bmBitsPixel;
             bmi.bmiHeader.biCompression = BI_RGB;
             bmi.bmiHeader.biSizeImage = 0;
 
-            int iWidth = _pScreenshotCtx->_sizeDesktop.cx;
-            int iHeight = _pScreenshotCtx->_sizeDesktop.cy;
+            int iWidth = bmpDimensions.cx;
+            int iHeight = bmpDimensions.cy;
 
             void *pvPixels = nullptr;
-            _hbmScreenshotDimmed = CreateDIBSection(hdcDimmed, &bmi, DIB_RGB_COLORS, &pvPixels, nullptr, 0);
-            if (_hbmScreenshotDimmed)
+            *phbmOut = CreateDIBSection(hdcDimmed, &bmi, DIB_RGB_COLORS, &pvPixels, nullptr, 0);
+            if (*phbmOut)
             {
-                HGDIOBJ hObjOld = SelectObject(hdcDimmed, _hbmScreenshotDimmed);
+                HGDIOBJ hObjOld = SelectObject(hdcDimmed, *phbmOut);
 
                 HDC hdcOrig = CreateCompatibleDC(hdcDesktop);
-                HGDIOBJ hObjOld2 = SelectObject(hdcOrig, _pScreenshotCtx->_hbmScreenshot);
+                HGDIOBJ hObjOld2 = SelectObject(hdcOrig, hbmSrc);
 
                 BitBlt(hdcDimmed, 0, 0, iWidth, iHeight, hdcOrig, 0, 0, SRCCOPY);
 
@@ -2452,11 +2518,17 @@ HBITMAP CScreenshotEditorRendererGDI::_MakeHideCursorBuffer(HBITMAP hbm)
     return hbmHidden;
 }
 
-HRESULT CScreenshotEditorRendererGDI::_MakeHideCursorBuffers()
+HRESULT CScreenshotEditorRendererGDI::_MakeCursorBuffers()
 {
     _hbmCursorNone = _MakeHideCursorBuffer(_hbmScreenshotLight);
     _hbmCursorDimmedNone = _MakeHideCursorBuffer(_hbmScreenshotDimmed);
-    return (_hbmCursor && _hbmCursorDimmedNone) ? S_OK : E_OUTOFMEMORY;
+
+    SIZE sizeCursor;
+    sizeCursor.cx = RECTWIDTH(_rcCursor);
+    sizeCursor.cy = RECTHEIGHT(_rcCursor);
+    _MakeDimmedScreenshot(_hbmCursor, sizeCursor, &_hbmCursorDimmed);
+
+    return (_hbmCursor && _hbmCursorDimmedNone && _hbmCursorDimmed) ? S_OK : E_OUTOFMEMORY;
 }
 
 HRESULT CScreenshotEditorRendererGDI::_ShowHideCursor(bool fVisible)
@@ -2485,31 +2557,6 @@ HRESULT CScreenshotEditorRendererGDI::_ShowHideCursor(bool fVisible)
         ReleaseDC(HWND_DESKTOP, hdcDesktop);
     }
 
-    if (!_hbmCursorDimmed)
-    {
-        // We have to refresh the dimmed screenshot to reflect the changes.
-        if (_hbmScreenshotDimmed)
-            DeleteObject(_hbmScreenshotDimmed);
-        _MakeDimmedScreenshot();
-
-        // Cache the dimmed cursor so we don't have to rebuild the entire dimmed framebuffer next time
-        // we want to draw it:
-        HDC hdcDesktop = GetDC(HWND_DESKTOP);
-        HDC hdc = CreateCompatibleDC(hdcDesktop);
-        _hbmCursorDimmed = CreateCompatibleBitmap(hdcDesktop, RECTWIDTH(_rcCursor), RECTHEIGHT(_rcCursor));
-        HGDIOBJ hBmpOld = SelectObject(hdc, _hbmCursorDimmed);
-        HDC hdcScreenshot = CreateCompatibleDC(hdcDesktop);
-        HGDIOBJ hBmpOldScreenshot = SelectObject(hdcScreenshot, _hbmScreenshotDimmed);
-
-        BitBlt(hdc, 0, 0, RECTWIDTH(_rcCursor), RECTHEIGHT(_rcCursor), hdcScreenshot, _rcCursor.left, _rcCursor.top, SRCCOPY);
-
-        SelectObject(hdcScreenshot, hBmpOldScreenshot);
-        DeleteDC(hdcScreenshot);
-        SelectObject(hdc, hBmpOld);
-        DeleteDC(hdc);
-        ReleaseDC(HWND_DESKTOP, hdcDesktop);
-    }
-    else
     {
         HDC hdcDesktop = GetDC(HWND_DESKTOP);
         HDC hdc = CreateCompatibleDC(hdcDesktop);
@@ -2752,8 +2799,6 @@ LRESULT CScreenshotEditorWindow::_OnCreate(CREATESTRUCT *pcs)
     }
     _ChangeTool(SSET_SELECT);
     SetWindowPos(_hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED);
-
-    ASSERT_KEEP(SUCCEEDED(_LoadExtensionTools()));
 
     ASSERT_KEEP(SUCCEEDED(_BuildSelectionTemplatesForMonitors()));
 
@@ -3540,6 +3585,7 @@ HRESULT CScreenshotEditorWindow::_EnsureToolbar()
 {
     if (!_pToolbar)
     {
+        ASSERT_KEEP(SUCCEEDED(_LoadExtensionTools()));
         _pToolbar = CEditorToolbar::Create(this, 0, WS_CHILD, 0, 0, 0, 0, _hwnd);
     }
 
