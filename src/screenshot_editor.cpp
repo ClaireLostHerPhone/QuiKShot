@@ -2802,7 +2802,17 @@ LRESULT CScreenshotEditorWindow::_OnCreate(CREATESTRUCT *pcs)
 
     ASSERT_KEEP(SUCCEEDED(_BuildSelectionTemplatesForMonitors()));
 
-    if (FAILED(_BeginGetWindowPositions()))
+    bool fEnumWindows = true;
+    if (FAILED(CConfigManager::GetInstance()->GetBool(TEXT("NoWindowSelectionTemplates"), &fEnumWindows)))
+    {
+        fEnumWindows = true;
+    }
+    else
+    {
+        fEnumWindows = !fEnumWindows;
+    }
+
+    if (!fEnumWindows || FAILED(_BeginGetWindowPositions()))
     {
         _fEnumeratedWindows = true;
     }
