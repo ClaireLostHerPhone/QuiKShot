@@ -29,7 +29,9 @@ public:
     //@End IScreenshotEditorPropertyProvider
 
     CPropertyProvider()
-        : _pPropColorFill(nullptr)
+        : _uRefCount(0)
+        , _pUnkSite(nullptr)
+        , _pPropColorFill(nullptr)
         , _pPropColorBorder(nullptr)
         , _crFill(RGB(255, 0, 0))
         , _crBorder(RGB(0, 0, 0))

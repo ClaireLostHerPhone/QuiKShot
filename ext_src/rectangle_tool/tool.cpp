@@ -14,8 +14,9 @@ STDMETHODIMP CRectangleTool::QueryInterface(const IID &riid, void **ppvOut)
     }
     else if (IsEqualGUID(riid, IID_IScreenshotEditorPropertyProvider))
     {
-        *ppvOut = static_cast<IScreenshotEditorPropertyProvider *>(this);
-        AddRef();
+        // This is a horrible API design.
+        *ppvOut = &_propProvider;
+        _propProvider.AddRef();
         return S_OK;
     }
 

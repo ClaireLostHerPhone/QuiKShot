@@ -27,6 +27,13 @@ HRESULT CPropertyProvider::_InitializeProperties()
     return hr;
 }
 
+STDMETHODIMP CPropertyProvider::QueryInterface(const IID &riid, void **ppvOut)
+{
+    if (!ppvOut)
+        return E_POINTER;
+    return _pUnkSite->QueryInterface(riid, ppvOut);
+}
+
 STDMETHODIMP CPropertyProvider::GetSite(REFIID riid, void **ppvSite)
 {
     if (!ppvSite)
