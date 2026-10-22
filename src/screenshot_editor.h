@@ -11,7 +11,7 @@ enum ScreenshotEditorTool
     SSET_SHOWCURSOR, // Not really a tool.
     SSET_ILLEGAL, // Used as a fallback if an extension tool fails.
 
-    SSET_EXTENSIONFIRST, // Used for extensions. Not really currently implemented.
+    SSET_EXTENSIONFIRST, // Used for extensions.
 };
 
 /**
@@ -37,11 +37,6 @@ enum Side
     SIDE_BOTTOM = 2,
     SIDE_LEFT   = 1 << 2,
     SIDE_RIGHT  = 2 << 2,
-
-    SIDE_TL     = SIDE_TOP | SIDE_LEFT,
-    SIDE_TR     = SIDE_TOP | SIDE_RIGHT,
-    SIDE_BL     = SIDE_BOTTOM | SIDE_LEFT,
-    SIDE_BR     = SIDE_BOTTOM | SIDE_RIGHT,
 };
 
 struct ExtensionToolInfo
@@ -353,7 +348,7 @@ class CScreenshotEditorRendererGDI
     HRESULT _FindRenderObjectFromInterfaceObject(
         IScreenshotEditorObject *pIfaceObj, OUT CRenderObject **ppRenderObjOut, OUT int *pIdxOut = nullptr);
     HBITMAP _MakeHideCursorBuffer(HBITMAP hbm);
-    HRESULT _MakeHideCursorBuffers();
+    HRESULT _MakeCursorBuffers();
     HRESULT _ShowHideCursor(bool fVisible);
 
 public:
@@ -703,7 +698,7 @@ protected:
     HRESULT _ChangeTool(ScreenshotEditorTool newTool);
     HRESULT _EnsureToolbar();
     void _ShowFloatingToolbar();
-    HRESULT _ProjectFloatingToolbarPosition(Side sideIn, RECT *prcBox, IN OUT Side *pSidePenetrate, OUT POINT *ptOut);
+    HRESULT _DetermineFloatingToolbarPosition(RECT *prcBox, OUT POINT *ptOut);
     void _HideFloatingToolbar();
     void _UpdateCursor();
     void _CancelSelection(bool fPushHistory);
@@ -713,10 +708,11 @@ protected:
     HRESULT _SelectObject(IScreenshotEditorObject *pObj);
     HRESULT _BuildObjectMenu(HMENU hmenu, IScreenshotEditorObject *pObj);
     HRESULT _DoPreviewSelection(IScreenshotEditorObject *pObj);
-    Side _GetCursorClosestSide(RECT *prc);
     HRESULT _BuildSelectionTemplatesForMonitors();
 
 public:
+    static constexpr int c_iPaddingFloatingTB = 10;
+
     enum WM
     {
         WM_SSE_GETWINDOWPOSITIONS = WM_APP + 1,
