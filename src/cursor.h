@@ -9,7 +9,8 @@ class CCursorRenderer
 	HBITMAP _hbmCursorMask;
 	POINT _ptCursor;
 
-	HRESULT _BlurCursorBitmap(HBITMAP hbm);
+	bool _IsAnyPixelXor(HBITMAP hbmMask);
+	HRESULT _BlurCursorShadowBitmap(HBITMAP hbm);
 
 public:
 	CCursorRenderer(HBITMAP hbmScreenshot, HCURSOR hcursor, HBITMAP hbmCursorColor, HBITMAP hbmCursorMask, POINT ptCursor)

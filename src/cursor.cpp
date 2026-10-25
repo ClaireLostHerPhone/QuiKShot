@@ -8,10 +8,217 @@
 // changes ourselves and calculating the time difference, I find it difficult to find worthwhile.
 //
 
-HRESULT CCursorRenderer::_BlurCursorBitmap(HBITMAP hbm)
+bool CCursorRenderer::_IsAnyPixelXor(HBITMAP hbmMask)
 {
-	// Not yet implemented.
-	return S_OK;
+	// This function doesn't seem to work right now.
+	return false;
+	BITMAP bm = { 0 };
+	if (!GetObject(hbmMask, sizeof(bm), &bm))
+	{
+		// If this function fails at any point, we'll treat it as though there is
+		// an XOR pixel present. This stops the cursor shadow from being rendered.
+		return true;
+	}
+
+	BITMAPINFO bmi = { 0 };
+	bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
+	bmi.bmiHeader.biWidth = bm.bmWidth;
+	bmi.bmiHeader.biHeight = -bm.bmHeight;
+	bmi.bmiHeader.biPlanes = 1;
+	bmi.bmiHeader.biBitCount = 32;
+	bmi.bmiHeader.biCompression = BI_RGB;
+
+	size_t cbBuffer = bm.bmWidth * bm.bmHeight * 4;
+	BYTE *pbPixels = new (std::nothrow) BYTE[cbBuffer];
+	if (!pbPixels)
+		return true;
+
+	bool fResult = true;
+
+	HDC hdc = CreateCompatibleDC(nullptr);
+	if (hdc)
+	{
+		fResult = false;
+
+		GetDIBits(
+			hdc,
+			hbmMask,
+			0,
+			bm.bmHeight,
+			pbPixels,
+			&bmi,
+			DIB_RGB_COLORS
+		);
+
+		pbPixels += (bm.bmHeight / 2) * 4;
+
+		for (int i = 0, len = bm.bmHeight / 2; i < len; i++)
+		{
+			DWORD dw = *(((DWORD *)pbPixels) + i) & 0x00FFFFFF;
+			if (dw != RGB(255, 255, 255))
+			{
+				fResult = true;
+				break;
+			}
+		}
+
+		DeleteDC(hdc);
+	}
+
+	delete[] pbPixels;
+	return fResult;
+}
+
+HRESULT CCursorRenderer::_BlurCursorShadowBitmap(HBITMAP hbm)
+{
+	USHORT us0[64];
+	USHORT us1[64];
+	USHORT us2[64];
+
+	USHORT *pus[3] = { 0 };
+
+	BITMAP bm = { 0 };
+	if (!GetObject(hbm, sizeof(bm), &bm))
+	{
+		return E_FAIL;
+	}
+
+	if (bm.bmWidth < 3 || bm.bmHeight < 3)
+	{
+		return E_FAIL;
+	}
+
+	if (bm.bmWidth > 64)
+	{
+		pus[0] = new USHORT[bm.bmWidth * 3];
+		pus[1] = pus[0] + bm.bmWidth;
+		pus[2] = pus[1] + bm.bmWidth;
+	}
+	else
+	{
+		pus[0] = us0;
+		pus[1] = us1;
+		pus[2] = us2;
+	}
+
+	BITMAPINFO bmi = { 0 };
+	bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
+	bmi.bmiHeader.biWidth = bm.bmWidth;
+	bmi.bmiHeader.biHeight = -bm.bmHeight;
+	bmi.bmiHeader.biPlanes = 1;
+	bmi.bmiHeader.biBitCount = 32;
+	bmi.bmiHeader.biCompression = BI_RGB;
+
+	HRESULT hr = E_FAIL;
+
+	size_t cbBuffer = bm.bmWidth * bm.bmHeight * 4;
+	BYTE *pbPixels = new (std::nothrow) BYTE[cbBuffer];
+	if (pbPixels)
+	{
+		HDC hdc = CreateCompatibleDC(nullptr);
+		if (hdc)
+		{
+			GetDIBits(
+				hdc,
+				hbm,
+				0,
+				bm.bmHeight,
+				pbPixels,
+				&bmi,
+				DIB_RGB_COLORS
+			);
+
+			ULONG *pulIn = (ULONG *)pbPixels;
+
+			// The first 3 scanlines have a 3x1 box blur calculated for them as
+			// input for the following blur.
+
+			USHORT *pus2 = nullptr;
+			USHORT *pusEnd = nullptr;
+			ULONG *pulTmp = nullptr;
+			for (int i = 0; i < 3; i++)
+			{
+				pus2 = pus[i];
+				pusEnd = pus2 + (bm.bmWidth - 2);
+				pulTmp = pulIn;
+
+				while (pus2 < pusEnd)
+				{
+					*pus2 = (USHORT)((pulTmp[0] >> 24) + (pulTmp[1] >> 24) + (pulTmp[2] >> 24));
+					pus2++;
+					pulTmp++;
+				}
+
+				// Increment the input scanline:
+				pulIn += bm.bmWidth;
+			}
+
+			// Next, a 3x3 box blur is applied to each output scanline.
+
+			ULONG *pulOut = (ULONG *)pbPixels + bm.bmWidth + 1;
+			ULONG ulNumScans = bm.bmHeight - 2;
+			ULONG ulNext = 0;
+
+			while (ulNumScans--)
+			{
+				ULONG *pulAvg = pulOut;
+				ULONG *pulAvgEnd = pulAvg + (bm.bmWidth - 2);
+
+				USHORT *pusTmp[3];
+				pusTmp[0] = pus[0];
+				pusTmp[1] = pus[1];
+				pusTmp[2] = pus[2];
+
+				while (pulAvg < pulAvgEnd)
+				{
+					USHORT usSum = *pusTmp[0] + *pusTmp[1] + *pusTmp[2];
+					*pulAvg = (usSum >> 3) << 24;
+
+					pulAvg++;
+					pusTmp[0]++;
+					pusTmp[1]++;
+					pusTmp[2]++;
+				}
+
+				// Increment the output scanline:
+				pulOut += bm.bmWidth;
+
+				if (ulNumScans)
+				{
+					pus2 = pus[ulNext];
+					pusEnd = pus2 + (bm.bmWidth - 2);
+					pulTmp = pulIn;
+
+					while (pus2 < pusEnd)
+					{
+						*pus2 = (USHORT)((pulTmp[0] >> 24) + (pulTmp[1] >> 24) + (pulTmp[2] >> 24));
+						pus2++;
+						pulTmp++;
+					}
+
+					// Increment the input scanline:
+					pulIn += bm.bmWidth;
+
+					ulNext++;
+					if (ulNext >= 3)
+						ulNext = 0;
+				}
+			}
+
+			SetDIBits(hdc, hbm, 0, bm.bmHeight, pbPixels, &bmi, DIB_RGB_COLORS);
+
+			DeleteDC(hdc);
+		}
+
+		delete[] pbPixels;
+	}
+
+	if (pus[0] != us0)
+	{
+		delete[] pus[0];
+	}
+
+	return hr;
 }
 
 HRESULT CCursorRenderer::RenderCursor(HBITMAP *phbmCursor, RECT *prcCursor)
@@ -40,10 +247,124 @@ HRESULT CCursorRenderer::RenderCursor(HBITMAP *phbmCursor, RECT *prcCursor)
 	HBITMAP hbmCursorPremult = nullptr;
 	PremultiplyAlpha(_hbmCursorColor, &hbmCursorPremult);
 	
-	if (hbmCursorPremult)
+	if (PortableIsAlphaBlendAvailable() && hbmCursorPremult)
 	{
 		HDC hdcCursor = CreateCompatibleDC(hdcDesktop);
 		HGDIOBJ hBmpOld = SelectObject(hdcCursor, hbmCursorPremult);
+
+		if (bm.bmBitsPixel == 32 && !_IsAnyPixelXor(_hbmCursorMask))
+		{
+			// Convert the mask to 32bpp:
+			HDC hdcDesktop = GetDC(HWND_DESKTOP);
+			HDC hdcShadow = CreateCompatibleDC(hdcDesktop);
+			HDC hdcMask = CreateCompatibleDC(hdcDesktop);
+
+			BITMAPINFO bmi = { 0 };
+			bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
+			bmi.bmiHeader.biWidth = bm.bmWidth;
+			bmi.bmiHeader.biHeight = -bm.bmHeight;
+			bmi.bmiHeader.biPlanes = 1;
+			bmi.bmiHeader.biBitCount = 32;
+			bmi.bmiHeader.biCompression = BI_RGB;
+
+			void *pvPixels;
+			HBITMAP hbmMask32bpp = CreateDIBSection(hdcShadow, &bmi, DIB_RGB_COLORS, &pvPixels, nullptr, 0);
+			HGDIOBJ hbmOld = SelectObject(hdcShadow, hbmMask32bpp);
+			HGDIOBJ hbmOldMask = SelectObject(hdcMask, _hbmCursorMask);
+
+			BitBlt(hdcShadow, 0, 0, bm.bmWidth, bm.bmHeight, hdcMask, 0, 0, SRCCOPY);
+
+			// Apply the constant alpha:
+			ULONG *pulSrc = (ULONG *)pvPixels;
+			for (int y = 0; y < bm.bmHeight; y++)
+			{
+				for (int x = 0; x < bm.bmWidth; x++)
+				{
+					static constexpr int c_iAlpha = 0x40;
+
+					int r = GetRValue(*pulSrc);
+					int g = GetGValue(*pulSrc);
+					int b = GetBValue(*pulSrc);
+
+					if (RGB(r, g, b) == RGB(255, 255, 255))
+					{
+						// If the pixel is white, skip.
+						pulSrc += 1;
+						continue;
+					}
+					else
+					{
+						*pulSrc = 0x40000000;
+					}
+
+					pulSrc += 1;
+				}
+			}
+
+			// Apply the blur:
+			_BlurCursorShadowBitmap(hbmMask32bpp);
+			_BlurCursorShadowBitmap(hbmMask32bpp);
+
+#if 0 // Not good yet.
+			// Remove the cursor mask from the buffer:
+			void *pvPixels2 = new (std::nothrow) BYTE[bm.bmWidth * bm.bmHeight * 4];
+			GetDIBits(
+				hdcMask,
+				_hbmCursorMask,
+				0,
+				bm.bmHeight,
+				pvPixels2,
+				&bmi,
+				DIB_RGB_COLORS
+			);
+
+			pulSrc = (ULONG *)pvPixels;
+			ULONG *pulSrc2 = (ULONG *)pvPixels2;
+			for (int y = 0; y < bm.bmHeight; y++)
+			{
+				for (int x = 0; x < bm.bmWidth; x++)
+				{
+					int r = GetRValue(*pulSrc2);
+					int g = GetGValue(*pulSrc2);
+					int b = GetBValue(*pulSrc2);
+
+					if (RGB(r, g, b) == RGB(0, 0, 0))
+					{
+						*pulSrc = 0x00000000;
+					}
+
+					pulSrc2 += 1;
+					pulSrc += 1;
+				}
+			}
+
+			delete[] pvPixels2;
+#endif
+
+			// Draw the shadow into the framebuffer:
+			BLENDFUNCTION bf;
+			bf.AlphaFormat = AC_SRC_ALPHA;
+			bf.SourceConstantAlpha = 255;
+			bf.BlendFlags = 0;
+			bf.BlendOp = AC_SRC_OVER;
+
+			PortableAlphaBlend(
+				hdc,
+				3, 1,
+				bm.bmWidth, bm.bmHeight,
+				hdcShadow,
+				0, 0,
+				bm.bmWidth, bm.bmHeight,
+				bf
+			);
+
+			SelectObject(hdcMask, hbmOldMask);
+			DeleteDC(hdcMask);
+
+			SelectObject(hdcShadow, hbmOld);
+			DeleteDC(hdcShadow);
+			ReleaseDC(HWND_DESKTOP, hdcDesktop);
+		}
 
 		// If we have an alpha cursor, then we'll just draw it with DrawIcon. This avoids alpha issues
 		// with animated cursors that I couldn't figure out how to avoid with AlphaBlending the bitmap
