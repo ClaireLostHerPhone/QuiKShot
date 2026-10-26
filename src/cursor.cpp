@@ -69,6 +69,132 @@ bool CCursorRenderer::_IsAnyPixelXor(HBITMAP hbmMask)
 	return fResult;
 }
 
+bool CCursorRenderer::_IsCursorShadowEnabled()
+{
+	BOOL fEnabled = FALSE;
+	SystemParametersInfo(SPI_GETCURSORSHADOW, 0, &fEnabled, FALSE);
+	return fEnabled;
+}
+
+HRESULT CCursorRenderer::_DrawCursorShadow(HDC hdc, BITMAP *pbm)
+{
+	if (PortableIsAlphaBlendAvailable() && pbm->bmBitsPixel == 32 && !_IsAnyPixelXor(_hbmCursorMask))
+	{
+		// Convert the mask to 32bpp:
+		HDC hdcDesktop = GetDC(HWND_DESKTOP);
+		HDC hdcShadow = CreateCompatibleDC(hdcDesktop);
+		HDC hdcMask = CreateCompatibleDC(hdcDesktop);
+
+		BITMAPINFO bmi = { 0 };
+		bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
+		bmi.bmiHeader.biWidth = pbm->bmWidth;
+		bmi.bmiHeader.biHeight = -pbm->bmHeight;
+		bmi.bmiHeader.biPlanes = 1;
+		bmi.bmiHeader.biBitCount = 32;
+		bmi.bmiHeader.biCompression = BI_RGB;
+
+		void *pvPixels;
+		HBITMAP hbmMask32bpp = CreateDIBSection(hdcShadow, &bmi, DIB_RGB_COLORS, &pvPixels, nullptr, 0);
+		HGDIOBJ hbmOld = SelectObject(hdcShadow, hbmMask32bpp);
+		HGDIOBJ hbmOldMask = SelectObject(hdcMask, _hbmCursorMask);
+
+		BitBlt(hdcShadow, 0, 0, pbm->bmWidth, pbm->bmHeight, hdcMask, 0, 0, SRCCOPY);
+
+		// Apply the constant alpha:
+		ULONG *pulSrc = (ULONG *)pvPixels;
+		for (int y = 0; y < pbm->bmHeight; y++)
+		{
+			for (int x = 0; x < pbm->bmWidth; x++)
+			{
+				static constexpr int c_iAlpha = 0x40;
+
+				int r = GetRValue(*pulSrc);
+				int g = GetGValue(*pulSrc);
+				int b = GetBValue(*pulSrc);
+
+				if (RGB(r, g, b) == RGB(255, 255, 255))
+				{
+					// If the pixel is white, skip.
+					pulSrc += 1;
+					continue;
+				}
+				else
+				{
+					*pulSrc = 0x40000000;
+				}
+
+				pulSrc += 1;
+			}
+		}
+
+		// Apply the blur. Windows applies the box blur twice.
+		_BlurCursorShadowBitmap(hbmMask32bpp);
+		_BlurCursorShadowBitmap(hbmMask32bpp);
+
+#if 0 // Not good yet.
+		// Remove the cursor mask from the buffer:
+		void *pvPixels2 = new (std::nothrow) BYTE[pbm->bmWidth * pbm->bmHeight * 4];
+		GetDIBits(
+			hdcMask,
+			_hbmCursorMask,
+			0,
+			pbm->bmHeight,
+			pvPixels2,
+			&bmi,
+			DIB_RGB_COLORS
+		);
+
+		pulSrc = (ULONG *)pvPixels;
+		ULONG *pulSrc2 = (ULONG *)pvPixels2;
+		for (int y = 0; y < pbm->bmHeight; y++)
+		{
+			for (int x = 0; x < pbm->bmWidth; x++)
+			{
+				int r = GetRValue(*pulSrc2);
+				int g = GetGValue(*pulSrc2);
+				int b = GetBValue(*pulSrc2);
+
+				if (RGB(r, g, b) == RGB(0, 0, 0))
+				{
+					*pulSrc = 0x00000000;
+				}
+
+				pulSrc2 += 1;
+				pulSrc += 1;
+			}
+		}
+
+		delete[] pvPixels2;
+#endif
+
+		// Draw the shadow into the framebuffer:
+		BLENDFUNCTION bf;
+		bf.AlphaFormat = AC_SRC_ALPHA;
+		bf.SourceConstantAlpha = 255;
+		bf.BlendFlags = 0;
+		bf.BlendOp = AC_SRC_OVER;
+
+		PortableAlphaBlend(
+			hdc,
+			3, 1,
+			pbm->bmWidth, pbm->bmHeight,
+			hdcShadow,
+			0, 0,
+			pbm->bmWidth, pbm->bmHeight,
+			bf
+		);
+
+		SelectObject(hdcMask, hbmOldMask);
+		DeleteDC(hdcMask);
+
+		SelectObject(hdcShadow, hbmOld);
+		DeleteDC(hdcShadow);
+		ReleaseDC(HWND_DESKTOP, hdcDesktop);
+	}
+
+	return S_OK;
+}
+
 HRESULT CCursorRenderer::_BlurCursorShadowBitmap(HBITMAP hbm)
 {
 	USHORT us0[64];
@@ -252,118 +378,9 @@ HRESULT CCursorRenderer::RenderCursor(HBITMAP *phbmCursor, RECT *prcCursor)
 		HDC hdcCursor = CreateCompatibleDC(hdcDesktop);
 		HGDIOBJ hBmpOld = SelectObject(hdcCursor, hbmCursorPremult);
 
-		if (bm.bmBitsPixel == 32 && !_IsAnyPixelXor(_hbmCursorMask))
+		if (_IsCursorShadowEnabled())
 		{
-			// Convert the mask to 32bpp:
-			HDC hdcDesktop = GetDC(HWND_DESKTOP);
-			HDC hdcShadow = CreateCompatibleDC(hdcDesktop);
-			HDC hdcMask = CreateCompatibleDC(hdcDesktop);
-
-			BITMAPINFO bmi = { 0 };
-			bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
-			bmi.bmiHeader.biWidth = bm.bmWidth;
-			bmi.bmiHeader.biHeight = -bm.bmHeight;
-			bmi.bmiHeader.biPlanes = 1;
-			bmi.bmiHeader.biBitCount = 32;
-			bmi.bmiHeader.biCompression = BI_RGB;
-
-			void *pvPixels;
-			HBITMAP hbmMask32bpp = CreateDIBSection(hdcShadow, &bmi, DIB_RGB_COLORS, &pvPixels, nullptr, 0);
-			HGDIOBJ hbmOld = SelectObject(hdcShadow, hbmMask32bpp);
-			HGDIOBJ hbmOldMask = SelectObject(hdcMask, _hbmCursorMask);
-
-			BitBlt(hdcShadow, 0, 0, bm.bmWidth, bm.bmHeight, hdcMask, 0, 0, SRCCOPY);
-
-			// Apply the constant alpha:
-			ULONG *pulSrc = (ULONG *)pvPixels;
-			for (int y = 0; y < bm.bmHeight; y++)
-			{
-				for (int x = 0; x < bm.bmWidth; x++)
-				{
-					static constexpr int c_iAlpha = 0x40;
-
-					int r = GetRValue(*pulSrc);
-					int g = GetGValue(*pulSrc);
-					int b = GetBValue(*pulSrc);
-
-					if (RGB(r, g, b) == RGB(255, 255, 255))
-					{
-						// If the pixel is white, skip.
-						pulSrc += 1;
-						continue;
-					}
-					else
-					{
-						*pulSrc = 0x40000000;
-					}
-
-					pulSrc += 1;
-				}
-			}
-
-			// Apply the blur:
-			_BlurCursorShadowBitmap(hbmMask32bpp);
-			_BlurCursorShadowBitmap(hbmMask32bpp);
-
-#if 0 // Not good yet.
-			// Remove the cursor mask from the buffer:
-			void *pvPixels2 = new (std::nothrow) BYTE[bm.bmWidth * bm.bmHeight * 4];
-			GetDIBits(
-				hdcMask,
-				_hbmCursorMask,
-				0,
-				bm.bmHeight,
-				pvPixels2,
-				&bmi,
-				DIB_RGB_COLORS
-			);
-
-			pulSrc = (ULONG *)pvPixels;
-			ULONG *pulSrc2 = (ULONG *)pvPixels2;
-			for (int y = 0; y < bm.bmHeight; y++)
-			{
-				for (int x = 0; x < bm.bmWidth; x++)
-				{
-					int r = GetRValue(*pulSrc2);
-					int g = GetGValue(*pulSrc2);
-					int b = GetBValue(*pulSrc2);
-
-					if (RGB(r, g, b) == RGB(0, 0, 0))
-					{
-						*pulSrc = 0x00000000;
-					}
-
-					pulSrc2 += 1;
-					pulSrc += 1;
-				}
-			}
-
-			delete[] pvPixels2;
-#endif
-
-			// Draw the shadow into the framebuffer:
-			BLENDFUNCTION bf;
-			bf.AlphaFormat = AC_SRC_ALPHA;
-			bf.SourceConstantAlpha = 255;
-			bf.BlendFlags = 0;
-			bf.BlendOp = AC_SRC_OVER;
-
-			PortableAlphaBlend(
-				hdc,
-				3, 1,
-				bm.bmWidth, bm.bmHeight,
-				hdcShadow,
-				0, 0,
-				bm.bmWidth, bm.bmHeight,
-				bf
-			);
-
-			SelectObject(hdcMask, hbmOldMask);
-			DeleteDC(hdcMask);
-
-			SelectObject(hdcShadow, hbmOld);
-			DeleteDC(hdcShadow);
-			ReleaseDC(HWND_DESKTOP, hdcDesktop);
+			_DrawCursorShadow(hdc, &bm);
 		}
 
 		// If we have an alpha cursor, then we'll just draw it with DrawIcon. This avoids alpha issues

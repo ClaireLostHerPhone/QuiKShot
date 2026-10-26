@@ -10,6 +10,8 @@ class CCursorRenderer
 	POINT _ptCursor;
 
 	bool _IsAnyPixelXor(HBITMAP hbmMask);
+	bool _ShouldDrawCursorShadow();
+	HRESULT _DrawCursorShadow(HDC hdc, BITMAP *pbm);
 	HRESULT _BlurCursorShadowBitmap(HBITMAP hbm);
 
 public:
