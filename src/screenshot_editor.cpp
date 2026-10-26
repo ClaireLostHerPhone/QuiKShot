@@ -537,7 +537,7 @@ LRESULT CEditorActionsStrip::v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPAR
             LRESULT lr = _OnNotify(pnmh, wParam, lParam, &fHandled);
             if (fHandled)
                 return lr;
-			break;
+            break;
         }
 
         case WM_MEASUREITEM:

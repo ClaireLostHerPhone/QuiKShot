@@ -256,13 +256,13 @@ public:
      */
     static CEditorFloatingToolbar *Create(CEditorToolbar *pToolbar, CEditorToolProperties *pToolProps);
 
-	CEditorFloatingToolbar()
-		: _pEditor(nullptr)
-		, _pToolbarTools(nullptr)
-		, _pActionStrip(nullptr)
+    CEditorFloatingToolbar()
+        : _pEditor(nullptr)
+        , _pToolbarTools(nullptr)
+        , _pActionStrip(nullptr)
         , _pToolProps(nullptr)
-	{
-	}
+    {
+    }
 };
 
 class CRenderObject
@@ -275,15 +275,15 @@ public:
     RECT _rcLatestLog;
     RECT _rcLatestVisual;
 
-	CRenderObject()
-		: _pObj(nullptr)
-		, _pRenderer(nullptr)
-		, _pRendererGdi(nullptr)
-		, _hbmLayer(nullptr)
-	{
+    CRenderObject()
+        : _pObj(nullptr)
+        , _pRenderer(nullptr)
+        , _pRendererGdi(nullptr)
+        , _hbmLayer(nullptr)
+    {
         ZeroMemory(&_rcLatestLog, sizeof(_rcLatestLog));
         ZeroMemory(&_rcLatestVisual, sizeof(_rcLatestVisual));
-	}
+    }
 
     inline bool HasGdiRenderer()
     {
@@ -359,15 +359,15 @@ public:
     CScreenshotEditorRendererGDI(CScreenshotContext *pCtx, HWND hwndRenderTarget)
         : _pScreenshotCtx(pCtx)
         , _hwndRenderTarget(hwndRenderTarget)
-		, _hpenSelect(nullptr)
-		, _hpenSizingHelpers(nullptr)
+        , _hpenSelect(nullptr)
+        , _hpenSizingHelpers(nullptr)
         , _hbmScreenshotLight(pCtx->_hbmScreenshot)
-		, _hbmScreenshotDimmed(nullptr)
+        , _hbmScreenshotDimmed(nullptr)
         , _hbmCursor(nullptr)
         , _hbmCursorNone(nullptr)
         , _hbmCursorDimmed(nullptr)
         , _hbmCursorDimmedNone(nullptr)
-		, _hbmMipmaps(nullptr)
+        , _hbmMipmaps(nullptr)
         , _pRenderObjSel(nullptr)
         , _cMipmaps(0)
         , _iSelMarqueeFrame(0)
@@ -761,27 +761,27 @@ public:
     ) override;
     //@End IScreenshotEditor
 
-	CScreenshotEditorWindow()
-		: _pScreenshotCtx(nullptr)
-		, _pRenderer(nullptr)
+    CScreenshotEditorWindow()
+        : _pScreenshotCtx(nullptr)
+        , _pRenderer(nullptr)
         , _pToolbar(nullptr)
         , _pToolProps(nullptr)
-		, _pFloatingToolbar(nullptr)
+        , _pFloatingToolbar(nullptr)
         , _pSelectedObject(nullptr)
         , _pHoveredObj(nullptr)
         , _tool(SSET_SELECT)
-		, _pExtTool(nullptr)
+        , _pExtTool(nullptr)
         , _iToolMode(0)
         , _fEnumeratedWindows(false)
         , _fIsSelectingRegion(false)
         , _fHasAnySelectionMade(false)
-	{
+    {
         _pHistoryMgr = new CEditHistoryManager();
 
         ZeroMemory(&_ptSelectionOrigin, sizeof(_ptSelectionOrigin));
         ZeroMemory(&_rcSelection, sizeof(_rcSelection));
         ZeroMemory(&_rcDragBegin, sizeof(_rcDragBegin));
-	}
+    }
 
     bool IsCursorShown();
     HRESULT RefreshPropertiesUI();
@@ -828,9 +828,9 @@ public:
      */
     static CFloatingScreenshotEditorWindow *CreateAndShow(CScreenshotEditorWindow *pEditor);
 
-	CFloatingScreenshotEditorWindow()
-		: _pEditor(nullptr)
-		, _hwndToolbar(nullptr)
-	{
-	}
+    CFloatingScreenshotEditorWindow()
+        : _pEditor(nullptr)
+        , _hwndToolbar(nullptr)
+    {
+    }
 };
