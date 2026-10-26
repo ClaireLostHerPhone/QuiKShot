@@ -67,12 +67,12 @@ STDMETHODIMP CObjectDebugTool::ToolSelectionChanged(BOOL fSelected)
 {
     if (!_pWnd)
     {
-        _pWnd = CObjectDebugWindow::Create(_pEditor, 0, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 400, 400, nullptr);
+        _pWnd = CObjectDebugWindow::Create(_pEditor, WS_EX_TOPMOST, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 400, 400, nullptr);
         if (!_pWnd)
             return HRESULT_FROM_WIN32(GetLastError());
     }
 
-    ShowWindow(_pWnd->GetHWND(), fSelected ? SW_SHOW : SW_HIDE);
+    SendMessage(_pWnd->GetHWND(), CObjectDebugWindow::WM_OBJDBGWND_TOOLCHANGED, fSelected, 0);
     return S_OK;
 }
 
