@@ -110,13 +110,13 @@ HRESULT CExtensionManager::LoadExtension(const TCHAR *pszPath)
         if (!pfnDllGetClassObject)
         {
             DBGPRINT(TEXT("Failed to get DllGetClassObject."));
-            FreeLibrary(hmod);
             hr = E_FAIL;
         }
         else
         {
             IClassFactory *pFac = nullptr;
             hr = pfnDllGetClassObject(CLSID_ScreenshotEditorExtension, IID_PPV_ARGS(&pFac));
+            DBGPRINT(TEXT("DllGetClassObject: %8X"), hr);
             if (SUCCEEDED(hr))
             {
                 IScreenshotEditorExtension *pExt = nullptr;
