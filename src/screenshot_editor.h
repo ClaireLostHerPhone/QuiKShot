@@ -681,7 +681,7 @@ protected:
     HRESULT _BeginGetWindowPositions();
     HRESULT _HandleGetWindowPositions();
     static DWORD WINAPI GetWindowPositionsThreadProc(void *lpParameter);
-    static HRESULT _OnGetWindowPositions(void *pvData)
+    static HRESULT CALLBACK _OnGetWindowPositions(void *pvData)
     {
         PostMessage((HWND)pvData, WM_SSE_GETWINDOWPOSITIONS, 0, 0);
         return S_OK;

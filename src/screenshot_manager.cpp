@@ -4,14 +4,15 @@
 #include "cfgmgr.h"
 #include "util.h"
 #include "dynarray.h"
+#include <objbase.h>
 
-// WIC is currently disabled for VS 2005 builds since the wincodec header cannot be used with it.
-#if defined(_UNICODE) && (defined(_MSVC_LANG) && _MSVC_LANG >= 201103L || !defined(_MSVC_LANG) && __cplusplus >= 201103L)
+// Non-Unicode builds target Windows 9x, which does not support WIC.
+#if defined(_UNICODE)
 #define COMPILETIME_ENABLE_WIC
 #endif
 
 #ifdef COMPILETIME_ENABLE_WIC
-    #include <wincodec.h>
+    #include "qs_wic.h"
 #endif
 
 struct KeyboardShortcut
@@ -338,7 +339,7 @@ class CSaveImage
     CDynamicArray<CodecInfo> _vCodecInfo;
 
 #ifdef COMPILETIME_ENABLE_WIC
-    IWICImagingFactory *_pWicFactory = nullptr;
+    IWICImagingFactory *_pWicFactory;
 #endif
 
     HRESULT _GetFilterExtensions(CDynamicArray<SupportedExtension> *pvse);
@@ -371,7 +372,7 @@ public:
 #ifdef COMPILETIME_ENABLE_WIC
         return _pWicFactory != nullptr;
 #else
-        // Non Unicode builds target Windows 9x, which does not support WIC.
+        // Non-Unicode builds target Windows 9x, which does not support WIC.
         return false;
 #endif
     }
@@ -398,7 +399,7 @@ CSaveImage::~CSaveImage()
 HRESULT CSaveImage::Initialize()
 {
 #ifdef COMPILETIME_ENABLE_WIC
-    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    HRESULT hr = CoInitialize(nullptr);
 
     // We don't care if the WIC factory fails to be created.
     (void)CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&_pWicFactory));
@@ -877,7 +878,7 @@ HRESULT CSaveImage::_EncodeWIC(GUID *pEncoderGuid, char **ppcData, int *pcbData)
     if (FAILED(hr))
         return hr;
 
-    WICPixelFormatGUID formatGuid;
+    GUID formatGuid;
     hr = spBitmap->GetPixelFormat(&formatGuid);
     if (FAILED(hr))
         return hr;
@@ -952,7 +953,7 @@ static void GetWindowPositionData(HWND hwnd, CDynamicArray<WindowPositionRecord>
 
     GetClassName(hwnd, wpr.szWindowClass, ARRAYSIZE(wpr.szWindowClass));
     
-    // N.B. This makes it impossible to capture another screenshot editor with the screenshot editor.
+    // N.B. This makes it impossible to select another screenshot editor instance's bounds automatically.
     // However, that might be for the better.
     if (_tcscmp(wpr.szWindowClass, TEXT("quikshot_ScreenshotEditorWindow")) == 0)
         return;
