@@ -11,7 +11,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PTSTR pCmdL
 {
     g_hinst = hInstance;
 
-    HANDLE hInstMutex = CreateMutex(nullptr, FALSE, TEXT("Local\\screenkirk_InstanceMutex"));
+    HANDLE hInstMutex = CreateMutex(nullptr, FALSE, TEXT("Local\\QuiKShot_InstanceMutex"));
 
     if (!hInstMutex)
     {
@@ -20,14 +20,14 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PTSTR pCmdL
 
     if (GetLastError() == ERROR_ALREADY_EXISTS)
     {
-        MessageBox(nullptr, TEXT("An instance of screenkirk is already running. A new instance will not be opened."),
-            TEXT("screenkirk"), MB_OK | MB_ICONERROR);
+        MessageBox(nullptr, TEXT("An instance of QuiKShot is already running. A new instance will not be opened."),
+            TEXT("QuiKShot"), MB_OK | MB_ICONERROR);
 
         CloseHandle(hInstMutex);
         return 0;
     }
 
-#if defined(_DEBUG) || defined(SCREENKIRK_SHOW_CONSOLE)
+#if defined(_DEBUG) || defined(QS_SHOW_CONSOLE)
     AllocConsole();
 
     FILE *fpOut;
@@ -66,10 +66,10 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PTSTR pCmdL
     {
         MessageBox(
             nullptr,
-            TEXT("Codename screenkirk cannot automatically register the screenshot shortcut on your platform.\n\n")
-            TEXT("For Linux, I use 'xdotool key --window $(xdotool search class \"screenkirk_*\" | head - n 1) shift+Scroll_Lock'. ")
+            TEXT("QuiKShot cannot automatically register the screenshot shortcut on your platform.\n\n")
+            TEXT("For Linux, I use 'xdotool key --window $(xdotool search class \"quikshot_*\" | head - n 1) shift+Scroll_Lock'. ")
             TEXT("However, your mileage may vary."),
-            TEXT("screenkirk"),
+            TEXT("QuiKShot"),
             MB_OK | MB_ICONWARNING
         );
     }

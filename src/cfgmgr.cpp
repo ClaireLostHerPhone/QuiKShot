@@ -1,17 +1,17 @@
 #include "pch.h"
 #include "cfgmgr.h"
 
-#define REGSTR_SCREENKIRK TEXT("SOFTWARE\\ClaireLostHerPhone\\QuiKShot")
+#define REGSTR_QUIKSHOT TEXT("SOFTWARE\\ClaireLostHerPhone\\QuiKShot")
 
 CConfigManager *g_pCfgMgrInst = nullptr;
 
 HRESULT CConfigManager::Initialize()
 {
     HKEY hkey = nullptr;
-    LONG ls = RegOpenKeyEx(HKEY_CURRENT_USER, REGSTR_SCREENKIRK, 0, KEY_READ, &hkey);
+    LONG ls = RegOpenKeyEx(HKEY_CURRENT_USER, REGSTR_QUIKSHOT, 0, KEY_READ, &hkey);
     if (ls != ERROR_SUCCESS)
     {
-        ls = RegCreateKey(HKEY_CURRENT_USER, REGSTR_SCREENKIRK, &hkey);
+        ls = RegCreateKey(HKEY_CURRENT_USER, REGSTR_QUIKSHOT, &hkey);
 
         if (ls != ERROR_SUCCESS)
         {

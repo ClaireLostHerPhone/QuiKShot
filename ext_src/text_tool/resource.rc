@@ -29,10 +29,10 @@ BEGIN
         BLOCK "040904E4"
         BEGIN
             VALUE "CompanyName",      "ClaireLostHerPhone"
-            VALUE "FileDescription",  "Text Tool for screenkirk"
+            VALUE "FileDescription",  "Text Tool for QuiKShot"
             VALUE "FileVersion",      VER_FILEVERSION_STR
             VALUE "InternalName",     "text_tool"
-            VALUE "LegalCopyright",   "Copyright © 2026, Claire Clancy. Licensed under GNU General Public License version 3.0."
+            VALUE "LegalCopyright",   "Copyright Â© 2026, Claire Clancy. Licensed under GNU General Public License version 3.0."
             VALUE "LegalTrademarks1", ""
             VALUE "LegalTrademarks2", ""
             VALUE "OriginalFilename", "text_tool.dll"

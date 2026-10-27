@@ -5,19 +5,21 @@
 #include <unknwn.h>
 #include <objbase.h>
 #include <tchar.h>
-#include "screenkirk.h"
+#include "QuiKShot.h"
 #include "portable.h"
 #include "portablep.h"
 #include "ccomptr.h"
 
-#define QS_APP_NAME         TEXT("codename screenkirk")
+#define QS_SHOW_CONSOLE
+
+#define QS_APP_NAME         TEXT("QuiKShot")
 #define QS_VER_STRING       TEXT("ver. alpha 1.0")
 #define QS_APP_FULL_BRAND   QS_APP_NAME TEXT(" ") QS_VER_STRING
 
 #define TOK_CAT_INNER(a, b) a##b
 #define TOK_CAT(a, b) TOK_CAT_INNER(a, b)
 
-#if defined(_DEBUG) || defined(SCREENKIRK_SHOW_CONSOLE)
+#if defined(_DEBUG) || defined(QS_SHOW_CONSOLE)
 #define DBGPRINT(...)                                                                    \
     (                                                                                    \
         (_tprintf(TEXT("[") TEXT(__FUNCTION__) TEXT("] "))),                                   \

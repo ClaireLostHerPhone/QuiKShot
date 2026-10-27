@@ -1,3 +1,3 @@
-# screenkirk
+# QuiKShot
 
-A fast screenshot utility for Windows. Tentative name.
+A fast screenshot utility for Windows.

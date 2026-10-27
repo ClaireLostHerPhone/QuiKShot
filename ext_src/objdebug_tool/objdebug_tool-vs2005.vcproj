@@ -4,7 +4,7 @@
 	Version="8.00"
 	Name="objdebug_tool"
 	ProjectGUID="{4CE615D2-6E39-41B6-89C9-570EDBE364F9}"
-	RootNamespace="screenkirk"
+	RootNamespace="quikshot"
 	Keyword="Win32Proj"
 	>
 	<Platforms>

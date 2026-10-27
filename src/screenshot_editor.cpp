@@ -4373,7 +4373,7 @@ CScreenshotEditorWindow *CScreenshotEditorWindow::CreateAndShow(CScreenshotConte
         // windows from sticking above it. Topmost status is cleared pretty quickly
         // since topmost fullscreen overlay windows are incredibly annoying.
         WS_EX_TOPMOST,
-        TEXT("Screenshot Editor - screenkirk"),
+        TEXT("Screenshot Editor - QuiKShot"),
         WS_POPUP,
         pScreenshotCtx->_ptVirtualScreen.x, pScreenshotCtx->_ptVirtualScreen.y,
         pScreenshotCtx->_sizeDesktop.cx, pScreenshotCtx->_sizeDesktop.cy,

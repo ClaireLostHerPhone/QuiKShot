@@ -33,14 +33,14 @@ BEGIN
         BLOCK "040904E4"
         BEGIN
             VALUE "CompanyName",      "ClaireLostHerPhone"
-            VALUE "FileDescription",  "screenkirk"
+            VALUE "FileDescription",  "QuiKShot"
             VALUE "FileVersion",      VER_FILEVERSION_STR
-            VALUE "InternalName",     "screenkirk"
-            VALUE "LegalCopyright",   "Copyright © 2026, Claire Clancy. Licensed under GNU General Public License version 3.0."
+            VALUE "InternalName",     "QuiKShot"
+            VALUE "LegalCopyright",   "Copyright Â© 2026, Claire Clancy. Licensed under GNU General Public License version 3.0."
             VALUE "LegalTrademarks1", ""
             VALUE "LegalTrademarks2", ""
-            VALUE "OriginalFilename", "screenkirk.exe"
-            VALUE "ProductName",      "screenkirk"
+            VALUE "OriginalFilename", "QuiKShot.exe"
+            VALUE "ProductName",      "QuiKShot"
             VALUE "ProductVersion",   VER_PRODUCTVERSION_STR
         END
     END

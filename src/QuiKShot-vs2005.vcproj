@@ -2,9 +2,9 @@
 <VisualStudioProject
 	ProjectType="Visual C++"
 	Version="8.00"
-	Name="screenkirk"
+	Name="QuiKShot"
 	ProjectGUID="{E87CF442-E537-4140-98FE-F180B922E43E}"
-	RootNamespace="screenkirk"
+	RootNamespace="quikshot"
 	Keyword="Win32Proj"
 	>
 	<Platforms>
@@ -17,8 +17,8 @@
 	<Configurations>
 		<Configuration
 			Name="Debug|Win32"
-			OutputDirectory="..\bin\vs2005-screenkirk-Win32-$(ConfigurationName)"
-			IntermediateDirectory="..\bin\vs2005-screenkirk-Win32-$(ConfigurationName)"
+			OutputDirectory="..\bin\vs2005-QuiKShot-Win32-$(ConfigurationName)"
+			IntermediateDirectory="..\bin\vs2005-QuiKShot-Win32-$(ConfigurationName)"
 			ConfigurationType="1"
 			CharacterSet="1"
 			WholeProgramOptimization="0"
@@ -97,8 +97,8 @@
 		</Configuration>
 		<Configuration
 			Name="Release|Win32"
-			OutputDirectory="..\bin\vs2005-screenkirk-Win32-$(ConfigurationName)"
-			IntermediateDirectory="..\bin\vs2005-screenkirk-Win32-$(ConfigurationName)"
+			OutputDirectory="..\bin\vs2005-QuiKShot-Win32-$(ConfigurationName)"
+			IntermediateDirectory="..\bin\vs2005-QuiKShot-Win32-$(ConfigurationName)"
 			ConfigurationType="1"
 			CharacterSet="1"
 			WholeProgramOptimization="1"
@@ -176,8 +176,8 @@
 		</Configuration>
 		<Configuration
 			Name="DebugANSI|Win32"
-			OutputDirectory="..\bin\vs2005-screenkirk-Win32-$(ConfigurationName)"
-			IntermediateDirectory="..\bin\vs2005-screenkirk-Win32-$(ConfigurationName)"
+			OutputDirectory="..\bin\vs2005-QuiKShot-Win32-$(ConfigurationName)"
+			IntermediateDirectory="..\bin\vs2005-QuiKShot-Win32-$(ConfigurationName)"
 			ConfigurationType="1"
 			CharacterSet="2"
 			WholeProgramOptimization="0"
@@ -256,8 +256,8 @@
 		</Configuration>
 		<Configuration
 			Name="ReleaseANSI|Win32"
-			OutputDirectory="..\bin\vs2005-screenkirk-Win32-$(ConfigurationName)"
-			IntermediateDirectory="..\bin\vs2005-screenkirk-Win32-$(ConfigurationName)"
+			OutputDirectory="..\bin\vs2005-QuiKShot-Win32-$(ConfigurationName)"
+			IntermediateDirectory="..\bin\vs2005-QuiKShot-Win32-$(ConfigurationName)"
 			ConfigurationType="1"
 			CharacterSet="2"
 			WholeProgramOptimization="3"
@@ -473,7 +473,7 @@
 				>
 			</File>
 			<File
-				RelativePath=".\screenkirk.h"
+				RelativePath=".\QuiKShot.h"
 				>
 			</File>
 			<File

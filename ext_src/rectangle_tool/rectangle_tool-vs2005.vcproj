@@ -4,7 +4,7 @@
 	Version="8.00"
 	Name="rectangle_tool"
 	ProjectGUID="{977F2463-9D5D-4842-BD6F-7779CB48FBB0}"
-	RootNamespace="screenkirk"
+	RootNamespace="quikshot"
 	Keyword="Win32Proj"
 	>
 	<Platforms>

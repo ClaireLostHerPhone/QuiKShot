@@ -26,10 +26,10 @@ BEGIN
         BLOCK "040904E4"
         BEGIN
             VALUE "CompanyName",      "ClaireLostHerPhone"
-            VALUE "FileDescription",  "Object Debug Tool for screenkirk"
+            VALUE "FileDescription",  "Object Debug Tool for QuiKShot"
             VALUE "FileVersion",      VER_FILEVERSION_STR
             VALUE "InternalName",     "objdebug_tool"
-            VALUE "LegalCopyright",   "Copyright � 2026, Claire Clancy. Licensed under GNU General Public License version 3.0."
+            VALUE "LegalCopyright",   "Copyright © 2026, Claire Clancy. Licensed under GNU General Public License version 3.0."
             VALUE "LegalTrademarks1", ""
             VALUE "LegalTrademarks2", ""
             VALUE "OriginalFilename", "objdebug_tool.dll"

@@ -4,7 +4,7 @@
 #define NOMINMAX
 #include <windows.h>
 #include <tchar.h>
-#include "screenkirk.h"
+#include "QuiKShot.h"
 #include "portable.h"
 
 #define RECTWIDTH(rc) ((rc).right - (rc).left)

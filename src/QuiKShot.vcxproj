@@ -22,7 +22,7 @@
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{be3e2416-b049-4494-afd1-d1556cded06b}</ProjectGuid>
-    <RootNamespace>screenkirk</RootNamespace>
+    <RootNamespace>QuiKShot</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />

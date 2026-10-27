@@ -6,7 +6,7 @@
 
 class CObjectDebugWindow : public CWindow<CObjectDebugWindow>
 {
-    DEFINE_WINDOW_CLASS("screenkirk.objdebug.ObjectDebugWindow");
+    DEFINE_WINDOW_CLASS("quikshot.objdebug.ObjectDebugWindow");
 
 private:
     IScreenshotEditor *_pEditor;

@@ -4,7 +4,7 @@
 
 class CNotifyWindow : public CWindow<CNotifyWindow>
 {
-    DEFINE_WINDOW_CLASS("screenkirk_NotifyWindow");
+    DEFINE_WINDOW_CLASS("quikshot_NotifyWindow");
 
 private:
     HMENU _hmenu;

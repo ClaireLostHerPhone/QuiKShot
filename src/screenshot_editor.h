@@ -51,7 +51,7 @@ struct ExtensionToolInfo
 //
 class CEditorToolbar : public CWindow<CEditorToolbar>
 {
-    DEFINE_WINDOW_CLASS("screenkirk_EditorToolbar");
+    DEFINE_WINDOW_CLASS("quikshot_EditorToolbar");
 
 private:
     class CScreenshotEditorWindow *_pEditor;
@@ -96,7 +96,7 @@ public:
 //
 class CEditorActionsStrip : public CWindow<CEditorActionsStrip>
 {
-    DEFINE_WINDOW_CLASS("screenkirk_EditorActionsStrip");
+    DEFINE_WINDOW_CLASS("quikshot_EditorActionsStrip");
 
 private:
     struct ExternalEditorDef
@@ -165,7 +165,7 @@ public:
 //
 class CEditorToolProperties : public CWindow<CEditorToolProperties>
 {
-    DEFINE_WINDOW_CLASS("screenkirk_EditorToolProperties");
+    DEFINE_WINDOW_CLASS("quikshot_EditorToolProperties");
 
 private:
     enum PropertyOwnerType
@@ -228,7 +228,7 @@ public:
 //
 class CEditorFloatingToolbar : public CWindow<CEditorFloatingToolbar>
 {
-    DEFINE_WINDOW_CLASS("screenkirk_EditorFloatingToolbar");
+    DEFINE_WINDOW_CLASS("quikshot_EditorFloatingToolbar");
 
 private:
     struct CreateData
@@ -617,7 +617,7 @@ class CScreenshotEditorWindow
     : public CWindow<CScreenshotEditorWindow>
     , public IScreenshotEditor
 {
-    DEFINE_WINDOW_CLASS("screenkirk_ScreenshotEditorWindow");
+    DEFINE_WINDOW_CLASS("quikshot_ScreenshotEditorWindow");
 
 private:
     class CEnumObjects : public IEnumUnknown
@@ -808,10 +808,9 @@ public:
 //
 // Host window for floating (non-fullscreen) screenshot editors.
 //
-const TCHAR c_szFloatingScreenshotEditorWindowClassName[] = TEXT("screenkirk_FloatingScreenshotEditorWindow");
 class CFloatingScreenshotEditorWindow : public CWindow<CFloatingScreenshotEditorWindow>
 {
-    DEFINE_WINDOW_CLASS("screenkirk_FloatingScreenshotEditorWindow");
+    DEFINE_WINDOW_CLASS("quikshot_FloatingScreenshotEditorWindow");
 
 private:
     CScreenshotEditorWindow *_pEditor;

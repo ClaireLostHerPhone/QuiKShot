@@ -202,7 +202,7 @@ static DWORD WINAPI ScreenshotWindowThreadProc(void *lpParameter)
     {
         MessageBox(nullptr,
             TEXT("Failed to create the screenshot editor window."),
-            TEXT("screenkirk"),
+            TEXT("QuiKShot"),
             MB_OK | MB_ICONERROR
         );
         delete pScreenshotCtx;
@@ -234,7 +234,7 @@ void OnScreenshotKeyPressed()
         {
             MessageBox(nullptr,
                 TEXT("Failed to create thread for the screenshot editor window."),
-                TEXT("screenkirk"),
+                TEXT("QuiKShot"),
                 MB_OK | MB_ICONERROR
             );
             delete pScreenshotCtx;
@@ -954,7 +954,7 @@ static void GetWindowPositionData(HWND hwnd, CDynamicArray<WindowPositionRecord>
     
     // N.B. This makes it impossible to capture another screenshot editor with the screenshot editor.
     // However, that might be for the better.
-    if (_tcscmp(wpr.szWindowClass, TEXT("screenkirk_ScreenshotEditorWindow")) == 0)
+    if (_tcscmp(wpr.szWindowClass, TEXT("quikshot_ScreenshotEditorWindow")) == 0)
         return;
 
     // TODO: Support other banned window classes.

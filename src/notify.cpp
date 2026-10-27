@@ -141,7 +141,7 @@ HRESULT CNotifyWindow::_CreateNotifyIcon()
     nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     nid.uCallbackMessage = WM_NOTIFYICON;
     nid.hIcon = LoadIcon(g_hinst, MAKEINTRESOURCE(IDI_APP));
-    lstrcpy(nid.szTip, TEXT("screenkirk"));
+    lstrcpy(nid.szTip, TEXT("QuiKShot"));
 
     Shell_NotifyIcon(NIM_ADD, &nid);
 
