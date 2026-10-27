@@ -374,3 +374,36 @@ HRESULT PremultiplyAlpha(HBITMAP hbmIn, OUT HBITMAP *phbmOut)
 
     return S_OK;
 }
+
+//
+// Miscellaneous
+//
+
+void LogIfFailedHelper(const TCHAR *pszExpr, HRESULT hr, const TCHAR *pszFile, const int iLine)
+{
+    TCHAR *pszMessage = nullptr;
+
+    DWORD cch = FormatMessage(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM
+            | FORMAT_MESSAGE_IGNORE_INSERTS,
+        nullptr,
+        hr,
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        (TCHAR *)pszMessage,
+        0,
+        nullptr
+    );
+
+    if (cch == 0)
+        pszMessage = TEXT("Unknown error");
+
+    DBGPRINT(TEXT("%s failed with HRESULT %8X: %s [%s:%d]"),
+        pszExpr,
+        hr,
+        pszMessage,
+        pszFile,
+        iLine
+    );
+
+    LocalFree(pszMessage);
+}

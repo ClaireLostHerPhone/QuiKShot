@@ -42,37 +42,21 @@
 #define ASSERT_KEEP(expr) (expr)
 #endif
 
+// util.h
+extern void LogIfFailedHelper(const TCHAR *pszExpr, HRESULT hr, const TCHAR *pszFile, const int iLine);
+
 #define LOG_IF_FAILED(hr_expr)                                                           \
     do                                                                                   \
     {                                                                                    \
         HRESULT __hr = hr_expr;                                                          \
         if (FAILED(__hr))                                                                \
         {                                                                                \
-            TCHAR *pszMessage = nullptr;                                                 \
-                                                                                         \
-            DWORD cch = FormatMessage(                                                   \
-                FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM              \
-                    | FORMAT_MESSAGE_IGNORE_INSERTS,                                     \
-                nullptr,                                                                 \
-                __hr,                                                                    \
-                MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),                               \
-                (TCHAR *)&pszMessage,                                                    \
-                0,                                                                       \
-                nullptr                                                                  \
-            );                                                                           \
-                                                                                         \
-            if (cch == 0)                                                                \
-                pszMessage = TEXT("Unknown error");                                      \
-                                                                                         \
-            DBGPRINT(TEXT("%s failed with HRESULT %8X: %s [%s:%d]"),                     \
+            LogIfFailedHelper(                                                           \
                 TEXT(#hr_expr),                                                          \
                 __hr,                                                                    \
-                pszMessage,                                                              \
                 TEXT(__FILE__),                                                          \
                 __LINE__                                                                 \
             );                                                                           \
-                                                                                         \
-            LocalFree(pszMessage);                                                       \
         }                                                                                \
     }                                                                                    \
     while (0);
