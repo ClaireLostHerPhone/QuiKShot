@@ -163,13 +163,6 @@ HRESULT CNotifyWindow::RegisterWindowClass()
 // static
 CNotifyWindow *CNotifyWindow::Create()
 {
-    // Windows 3.x-series operating systems don't have a taskbar or support notification
-    // tray items.
-    if (GetOSVersion()->dwMajorVersion <= 3)
-    {
-        return nullptr;
-    }
-
     RegisterWindowClass();
 
     CNotifyWindow *pWnd = CWindow::Create(

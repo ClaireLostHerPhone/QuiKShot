@@ -43,6 +43,29 @@ struct OSVersion
         }
     }
 
+    inline bool IsGreaterThanVersion(DWORD dwMajorExpect, DWORD dwMinorExpect)
+    {
+        if (dwMajorVersion > dwMajorExpect)
+        {
+            return true;
+        }
+        else if (dwMajorVersion == dwMajorExpect)
+        {
+            if (dwMinorVersion > dwMinorExpect)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        else
+        {
+            return false;
+        }
+    }
+
     inline bool IsLessEqualVersion(DWORD dwMajorExpect, DWORD dwMinorExpect)
     {
         if (dwMajorVersion < dwMajorExpect)
@@ -52,6 +75,29 @@ struct OSVersion
         else if (dwMajorVersion == dwMajorExpect)
         {
             if (dwMinorVersion <= dwMinorExpect)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    inline bool IsLessThanVersion(DWORD dwMajorExpect, DWORD dwMinorExpect)
+    {
+        if (dwMajorVersion < dwMajorExpect)
+        {
+            return true;
+        }
+        else if (dwMajorVersion == dwMajorExpect)
+        {
+            if (dwMinorVersion < dwMinorExpect)
             {
                 return true;
             }

@@ -42,14 +42,34 @@ bool PortableIsAlphaBlendAvailable()
     return g_pfnAlphaBlend ? true : false;
 }
 
+typedef HRESULT (WINAPI *AssocCreate_t)(CLSID clsid, REFIID riid, void **ppv);
+AssocCreate_t g_pfnAssocCreate = nullptr;
+
+HRESULT PortableAssocCreate(CLSID clsid, REFIID riid, void **ppv)
+{
+    if (!g_pfnAssocCreate)
+        return E_NOTIMPL;
+
+    return g_pfnAssocCreate(clsid, riid, ppv);
+}
+
+bool PortableIsAssocCreateAvailable()
+{
+    return g_pfnAssocCreate ? true : false;
+}
+
 HRESULT PortableInitialize()
 {
-    HMODULE hmUser32 = LoadLibrary(TEXT("user32.dll"));
-
     HMODULE hmMsimg32 = LoadLibrary(TEXT("msimg32.dll"));
     if (hmMsimg32)
     {
         g_pfnAlphaBlend = (AlphaBlend_t)GetProcAddress(hmMsimg32, "AlphaBlend");
+    }
+
+    HMODULE hmShlwapi = LoadLibrary(TEXT("shlwapi.dll"));
+    if (hmShlwapi)
+    {
+        g_pfnAssocCreate = (AssocCreate_t)GetProcAddress(hmShlwapi, "AssocCreate");
     }
 
     return S_OK;

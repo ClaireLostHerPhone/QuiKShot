@@ -13,6 +13,10 @@ HRESULT PortableAlphaBlend(
 
 bool PortableIsAlphaBlendAvailable();
 
+HRESULT PortableAssocCreate(CLSID clsid, REFIID riid, void **ppv);
+
+bool PortableIsAssocCreateAvailable();
+
 #if NTDDI_VERSION < 0x0600
 enum _ASSOC_FILTER
 {

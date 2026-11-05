@@ -8,6 +8,8 @@
 #include <assert.h>
 #include "cursor.h"
 #include "cfgmgr.h"
+#include <ShlGuid.h>
+#include <Shlwapi.h>
 
 static HRESULT GetAdjustedObjectVisualRect(IScreenshotEditorObject *pObj, RECT *prc)
 {
@@ -834,95 +836,490 @@ HRESULT CEditorActionsStrip::_LoadIcons()
     return S_OK;
 }
 
+enum AssocHandlerType
+{
+    AH_EXE,
+    AH_PROGID,
+};
+
+// Old SDK are lacking certain headers for association handlers, so we'll define them manually.
+#if NTDDI_VERSION < 0x06010000
+#include <initguid.h>
+
+// {F04061AC-1659-4a3f-A954-775AA57FC083}
+DEFINE_GUID(IID_IAssocHandler, 0xF04061AC, 0x1659, 0x4A3F, 0xA9,0x54, 0x77,0x5A,0xA5,0x7F,0xC0,0x83);
+
+// {973810ae-9599-4b88-9e4d-6ee98c9552da}
+DEFINE_GUID(IID_IEnumAssocHandlers, 0x973810AE, 0x9599, 0x4B88, 0x9E,0x4D, 0x6E,0xE9,0x8C,0x95,0x52,0xDA);
+
+#define IAssocHandlerInvoker void
+#endif
+
+class CAssocHandlerQS : public IAssocHandler
+{
+    IQueryAssociations *_pqa;
+    TCHAR _szExePath[MAX_PATH];
+    AssocHandlerType _type;
+    int _flags;
+
+    HRESULT _GetApplicationKeyPath(const TCHAR *pszApp, TCHAR *pszKey, int cch)
+    {
+#undef PathAppend // QS name conflicts with shlwapi.h
+        _tcscpy_s(pszKey, cch, TEXT("Applications"));
+
+        if (SUCCEEDED(PathAppend(pszKey, pszApp)))
+        {
+            if (*PathFindFileExtension(pszApp) == 0)
+            {
+                _tcscat_s(pszKey, cch, TEXT(".exe"));
+            }
+
+            return S_OK;
+        }
+
+        return E_FAIL;
+    }
+
+    HRESULT _OpenApplicationKey(const TCHAR *pszApp, HKEY *phkey)
+    {
+        HRESULT hr = E_FAIL;
+
+        TCHAR szAppKeyPath[MAX_PATH];
+        _GetApplicationKeyPath(pszApp, szAppKeyPath, ARRAYSIZE(szAppKeyPath));
+
+        LONG ls = RegOpenKeyEx(HKEY_CLASSES_ROOT, szAppKeyPath, 0, MAXIMUM_ALLOWED, phkey);
+        if (ls == ERROR_SUCCESS)
+        {
+            hr = S_OK;
+            int cch;
+            if (ERROR_SUCCESS == RegQueryValueEx(*phkey, TEXT("NoOpenWith"), nullptr, nullptr, nullptr, nullptr))
+            {
+                hr = E_ACCESSDENIED;
+                RegCloseKey(*phkey);
+                *phkey = nullptr;
+            }
+        }
+
+        return hr;
+    }
+
+public:
+    IMPLEMENT_IUNKNOWN;
+
+    CAssocHandlerQS()
+        : _uRefCount(0)
+        , _pqa(nullptr)
+        , _type(AH_EXE)
+        , _flags(0)
+    {
+        ZeroMemory(_szExePath, sizeof(_szExePath));
+    }
+
+    ~CAssocHandlerQS()
+    {
+        _pqa->Release();
+    }
+
+    HRESULT Init(AssocHandlerType type, const TCHAR *pszExt, const TCHAR *pszInit)
+    {
+        _type = type;
+
+        HRESULT hr = PortableAssocCreate(CLSID_QueryAssociations, IID_IQueryAssociations, (void **)&_pqa);
+        if (SUCCEEDED(hr))
+        {
+            if (type == AH_EXE)
+            {
+                HKEY hkey;
+                hr = _OpenApplicationKey(pszInit, &hkey);
+                if (SUCCEEDED(hr))
+                {
+                    _flags |= ASSOCF_INIT_BYEXENAME;
+                    hr = _pqa->Init(_flags, pszInit, hkey, nullptr);
+                }
+            }
+            else if (type == AH_PROGID)
+            {
+                hr = _pqa->Init(_flags, pszInit, nullptr, nullptr);
+            }
+        }
+
+        if (SUCCEEDED(hr))
+        {
+            DWORD cch = MAX_PATH;
+            hr = _pqa->GetString(_flags | ASSOCF_VERIFY, ASSOCSTR_EXECUTABLE, nullptr, _szExePath, &cch);
+        }
+
+        return hr;
+    }
+
+    STDMETHODIMP GetName(TCHAR **ppsz) override
+    {
+        *ppsz = (TCHAR *)CoTaskMemAlloc((MAX_PATH + 1) * sizeof(TCHAR));
+        if (!*ppsz)
+            return E_OUTOFMEMORY;
+        _tcscpy_s(*ppsz, MAX_PATH, _szExePath);
+        return S_OK;
+    }
+
+    STDMETHODIMP GetUIName(TCHAR **ppsz) override
+    {
+        *ppsz = (TCHAR *)CoTaskMemAlloc((MAX_PATH + 1) * sizeof(TCHAR));
+        if (!*ppsz)
+            return E_OUTOFMEMORY;
+        DWORD cch = MAX_PATH;
+        _pqa->GetString(_flags | ASSOCF_VERIFY, ASSOCSTR_FRIENDLYAPPNAME, nullptr, *ppsz, &cch);
+        return S_OK;
+    }
+
+    STDMETHODIMP GetIconLocation(TCHAR **ppszPath, int *pIndex) override
+    {
+        *pIndex = 0;
+        return GetName(ppszPath);
+    }
+
+    STDMETHODIMP IsRecommended() override { return E_NOTIMPL; }
+
+    STDMETHODIMP MakeDefault(const TCHAR *pszDescription) override { return E_NOTIMPL; }
+
+    STDMETHODIMP Invoke(IDataObject *pdo) override
+    {
+        // I don't know if we'll use this or not.
+        return E_NOTIMPL;
+    }
+
+    STDMETHODIMP CreateInvoker(IDataObject *pdo, IAssocHandlerInvoker **ppInvoker) override { return E_NOTIMPL; }
+};
+
+STDMETHODIMP CAssocHandlerQS::QueryInterface(const IID &riid, void **ppvOut)
+{
+    if (IsEqualGUID(riid, IID_IUnknown) || IsEqualGUID(riid, IID_IAssocHandler))
+    {
+        AddRef();
+        *ppvOut = static_cast<IAssocHandler *>(this);
+        return S_OK;
+    }
+
+    return E_NOINTERFACE;
+}
+
+// Our own clone of Windows' implementation for older operating systems.
+class CEnumAssocHandlersQS : public IEnumAssocHandlers
+{
+    TCHAR _szExt[MAX_PATH];
+    HKEY _hkProgids;
+    HKEY _hkExt;
+    HKEY _hkType;
+    UINT _uiCur;
+    bool _fHandledDefault;
+    int _cProgids;
+    int _cExes;
+    int _cType;
+
+    bool _NextDefault(CAssocHandlerQS **ppah)
+    {
+        if (_fHandledDefault)
+            return false;
+
+        HKEY hk = nullptr;
+        RegOpenKey(HKEY_CLASSES_ROOT, _szExt, &hk);
+
+        TCHAR szDefault[MAX_PATH] = { 0 };
+        DWORD cch = MAX_PATH;
+        LONG ls = RegQueryValueEx(hk, nullptr, nullptr, nullptr, (BYTE *)&szDefault, &cch);
+
+        RegCloseKey(hk);
+
+        CAssocHandlerQS *pah = new (std::nothrow) CAssocHandlerQS();
+        if (!pah)
+            return false;
+        if (FAILED(pah->Init(AH_PROGID, _szExt, szDefault)))
+            return false;
+
+        *ppah = pah;
+        _fHandledDefault = true;
+        return true;
+    }
+
+    bool _NextExe(HKEY *phk, int *piCount, CAssocHandlerQS **ppah)
+    {
+        bool fRet = false;
+
+        while (*phk && !fRet)
+        {
+            TCHAR szHandler[MAX_PATH];
+            DWORD cch = MAX_PATH;
+            LONG ls = RegEnumKeyEx(*phk, *piCount, szHandler, &cch, nullptr, nullptr, nullptr, nullptr);
+
+            if (ls == ERROR_SUCCESS)
+            {
+                CAssocHandlerQS *pah = new (std::nothrow) CAssocHandlerQS();
+                fRet = pah != nullptr;
+                if (fRet)
+                {
+                    *ppah = pah;
+                    fRet = SUCCEEDED(pah->Init(AH_EXE, _szExt, szHandler));
+                }
+                (*piCount)++;
+            }
+            else
+            {
+                RegCloseKey(*phk);
+                *phk = nullptr;
+            }
+        }
+
+        return fRet;
+    }
+
+    bool _NextProgid(HKEY *phk, int *piCount, CAssocHandlerQS **ppah)
+    {
+        bool fRet = false;
+
+        while (*phk && !fRet)
+        {
+            TCHAR szHandler[MAX_PATH];
+            DWORD cch = MAX_PATH;
+            LONG ls = RegEnumValue(*phk, *piCount, szHandler, &cch, nullptr, nullptr, nullptr, nullptr);
+
+            if (ls == ERROR_SUCCESS)
+            {
+                CAssocHandlerQS *pah = new (std::nothrow) CAssocHandlerQS();
+                fRet = pah != nullptr;
+                if (fRet)
+                {
+                    *ppah = pah;
+                    fRet = SUCCEEDED(pah->Init(AH_PROGID, _szExt, szHandler));
+                }
+                (*piCount)++;
+            }
+            else
+            {
+                RegCloseKey(*phk);
+                *phk = nullptr;
+            }
+        }
+
+        return fRet;
+    }
+
+public:
+    IMPLEMENT_IUNKNOWN;
+
+    CEnumAssocHandlersQS()
+        : _uRefCount(0)
+        , _hkProgids(nullptr)
+        , _hkExt(nullptr)
+        , _hkType(nullptr)
+        , _uiCur(0)
+        , _fHandledDefault(false)
+        , _cProgids(0)
+        , _cExes(0)
+        , _cType(0)
+    {
+        ZeroMemory(_szExt, sizeof(_szExt));
+    }
+
+    ~CEnumAssocHandlersQS()
+    {
+        RegCloseKey(_hkProgids);
+        RegCloseKey(_hkExt);
+        RegCloseKey(_hkType);
+    }
+
+    HRESULT Init(const TCHAR *pszExt)
+    {
+        _tcscpy_s(_szExt, pszExt);
+
+        TCHAR szKey[MAX_PATH];
+
+        _stprintf_s(szKey, MAX_PATH, TEXT("%s\\OpenWithProgids"), pszExt);
+        RegOpenKeyEx(HKEY_CLASSES_ROOT, szKey, 0, MAXIMUM_ALLOWED, &_hkProgids);
+
+        _stprintf_s(szKey, MAX_PATH, TEXT("%s\\OpenWithList"), pszExt);
+        RegOpenKeyEx(HKEY_CLASSES_ROOT, szKey, 0, MAXIMUM_ALLOWED, &_hkExt);
+
+        HKEY hkRoot = nullptr;
+        RegOpenKeyEx(HKEY_CLASSES_ROOT, pszExt, 0, MAXIMUM_ALLOWED, &hkRoot);
+
+        TCHAR szPerceivedType[MAX_PATH];
+        DWORD cch = MAX_PATH;
+        LONG ls = RegQueryValueEx(hkRoot, TEXT("PerceivedType"), nullptr, nullptr, (BYTE *)&szPerceivedType, &cch);
+        if (ls == ERROR_SUCCESS)
+        {
+            _stprintf_s(szKey, MAX_PATH, TEXT("SystemFileAssociations\\%s\\OpenWithList"), szPerceivedType);
+            RegOpenKeyEx(HKEY_CLASSES_ROOT, szKey, 0, MAXIMUM_ALLOWED, &_hkType);
+        }
+
+        return S_OK;
+    }
+
+    STDMETHODIMP Next(ULONG celt, IAssocHandler **rgelt, ULONG *pceltFetched) override
+    {
+        UINT c = 0;
+        ZeroMemory(rgelt, sizeof(rgelt[0]) * celt);
+
+        while (c < celt && _NextDefault((CAssocHandlerQS **)&rgelt[c]))
+        {
+            c++;
+        }
+
+        while (c < celt && _NextProgid(&_hkProgids, &_cProgids, (CAssocHandlerQS **)&rgelt[c]))
+        {
+            c++;
+        }
+
+        while (c < celt && _NextExe(&_hkExt, &_cExes, (CAssocHandlerQS **)&rgelt[c]))
+        {
+            c++;
+        }
+
+        while (c < celt && _NextExe(&_hkType, &_cType, (CAssocHandlerQS **)&rgelt[c]))
+        {
+            c++;
+        }
+
+        if (pceltFetched)
+            *pceltFetched = c;
+
+        return (c > 0) ? S_OK : S_FALSE;
+    }
+};
+
+STDMETHODIMP CEnumAssocHandlersQS::QueryInterface(const IID &riid, void **ppvOut)
+{
+    if (IsEqualGUID(riid, IID_IUnknown) || IsEqualGUID(riid, IID_IEnumAssocHandlers))
+    {
+        AddRef();
+        *ppvOut = this;
+        return S_OK;
+    }
+
+    return E_NOINTERFACE;
+}
+
+HRESULT WINAPI QSAssocEnumHandlers(const TCHAR *pszExtra, ASSOC_FILTER afFilter, IEnumAssocHandlers **ppEnumHandler)
+{
+    HRESULT hr = E_FAIL;
+
+    if (!PortableIsAssocCreateAvailable())
+    {
+        return E_FAIL;
+    }
+
+    CEnumAssocHandlersQS *pEnumHandler = new (std::nothrow) CEnumAssocHandlersQS();
+    if (pEnumHandler)
+    {
+        hr = pEnumHandler->Init(pszExtra);
+        if (SUCCEEDED(hr))
+            *ppEnumHandler = pEnumHandler;
+    }
+    else
+    {
+        hr = E_OUTOFMEMORY;
+    }
+
+    if (FAILED(hr) && pEnumHandler)
+    {
+        delete pEnumHandler;
+    }
+
+    return hr;
+}
+
 HRESULT CEditorActionsStrip::_EnumOpenWithHandlers()
 {
     HRESULT hr = E_FAIL;
 
-    // SHAssocEnumHandlers is only available since Windows Vista. For now, we'll just return that
-    // there's no support if we're running on an older operating system.
-    // TODO: We can enumerate HKEY_CLASSES_ROOT to find association handlers manually on older
-    // operating systems.
-    if (GetOSVersion()->IsLessEqualVersion(5, 2))
+    // Open with lists are only available since Windows 2000. On earlier operating systems, we won't
+    // even bother checking.
+    if (GetOSVersion()->IsLessThanVersion(5, 0))
     {
         return hr;
     }
 
+    SHAssocEnumHandlers_t pfnSHAssocEnumHandlers = nullptr;
+
     HMODULE hmShell32 = LoadLibrary(TEXT("shell32.dll"));
     if (hmShell32)
     {
-        SHAssocEnumHandlers_t pfnSHAssocEnumHandlers
-            = (SHAssocEnumHandlers_t)GetProcAddress(hmShell32, "SHAssocEnumHandlers");
-        if (pfnSHAssocEnumHandlers)
+        pfnSHAssocEnumHandlers = (SHAssocEnumHandlers_t)GetProcAddress(hmShell32, "SHAssocEnumHandlers");
+    }
+
+    if (pfnSHAssocEnumHandlers == nullptr)
+    {
+        pfnSHAssocEnumHandlers = QSAssocEnumHandlers;
+    }
+
+    IEnumAssocHandlers *pEnum = nullptr;
+    if (SUCCEEDED(pfnSHAssocEnumHandlers(TEXT(".png"), ASSOC_FILTER_RECOMMENDED, &pEnum)))
+    {
+        IAssocHandler *pAssoc = nullptr;
+        ULONG uceltFetched = 0;
+        while (SUCCEEDED(pEnum->Next(1, &pAssoc, &uceltFetched)) && pAssoc)
         {
-            IEnumAssocHandlers *pEnum = nullptr;
-            if (SUCCEEDED(pfnSHAssocEnumHandlers(TEXT(".png"), ASSOC_FILTER_RECOMMENDED, &pEnum)))
+            ExternalEditorDef eed = { 0 };
+
+            TCHAR *pszPath = nullptr;
+            if (SUCCEEDED(pAssoc->GetName(&pszPath))) // GetName returns the path for non-UWP applications
             {
-                IAssocHandler *pAssoc = nullptr;
-                ULONG uceltFetched = 0;
-                while (SUCCEEDED(pEnum->Next(1, &pAssoc, &uceltFetched)) && pAssoc)
+                _tcscpy_s(eed.szProgramPath, pszPath);
+                CoTaskMemFree(pszPath);
+            }
+
+            TCHAR *pszName = nullptr;
+            if (SUCCEEDED(pAssoc->GetUIName(&pszName)))
+            {
+                _tcscpy_s(eed.szName, pszName);
+                CoTaskMemFree(pszName);
+            }
+
+            TCHAR *pszIconPath = nullptr;
+            int iIconIdx = 0; // This is used for shell image lists, which we are not using here.
+            if (SUCCEEDED(pAssoc->GetIconLocation(&pszIconPath, &iIconIdx)))
+            {
+                HICON hicon;
+                ExtractIconEx(pszIconPath, 0, nullptr, &hicon, 1);
+                eed.hIcon = hicon;
+
+                // N.B. On pre-comctlv6 systems (Windows 2000 and prior), this will fill the background
+                // of the icon for the toolbar. The menu will use a separate icon since its color differs.
+                // On Vista (maybe XP?) and higher, toolbars and menus both support alpha-blended icons, so the same
+                // bitmap can be used for both.
+                HBITMAP hbmIconRaw = ToolbarIconToBitmap(hicon);
+                HBITMAP hbmPremult = nullptr;
+
+                if (GetCommonControlsVersion().dwMajorVersion >= 6)
                 {
-                    ExternalEditorDef eed = { 0 };
-
-                    TCHAR *pszPath = nullptr;
-                    if (SUCCEEDED(pAssoc->GetName(&pszPath))) // GetName returns the path for non-UWP applications
-                    {
-                        _tcscpy_s(eed.szProgramPath, pszPath);
-                        CoTaskMemFree(pszPath);
-                    }
-                    
-                    TCHAR *pszName = nullptr;
-                    if (SUCCEEDED(pAssoc->GetUIName(&pszName)))
-                    {
-                        _tcscpy_s(eed.szName, pszName);
-                        CoTaskMemFree(pszName);
-                    }
-
-                    TCHAR *pszIconPath = nullptr;
-                    int iIconIdx = 0; // This is used for shell image lists, which we are not using here.
-                    if (SUCCEEDED(pAssoc->GetIconLocation(&pszIconPath, &iIconIdx)))
-                    {
-                        HICON hicon;
-                        ExtractIconEx(pszIconPath, 0, nullptr, &hicon, 1);
-                        eed.hIcon = hicon;
-
-                        // N.B. On pre-comctlv6 systems (Windows 2000 and prior), this will fill the background
-                        // of the icon for the toolbar. The menu will use a separate icon since its color differs.
-                        // On Vista (maybe XP?) and higher, toolbars and menus both support alpha-blended icons, so the same
-                        // bitmap can be used for both.
-                        HBITMAP hbmIconRaw = ToolbarIconToBitmap(hicon);
-                        HBITMAP hbmPremult = nullptr;
-
-                        if (GetCommonControlsVersion().dwMajorVersion >= 6)
-                        {
-                            PremultiplyAlpha(hbmIconRaw, &hbmPremult);
-                        }
-                        else
-                        {
-                            eed.hbmIconMenu = MenuIconToBitmap(hicon);
-                        }
-
-                        if (hbmPremult)
-                        {
-                            eed.hbmIcon = hbmPremult;
-                            DeleteObject(hbmIconRaw);
-                        }
-                        else
-                        {
-                            eed.hbmIcon = hbmIconRaw;
-                        }
-
-                        CoTaskMemFree(pszIconPath);
-                    }
-
-                    _vExternEditors.Push(eed);
-                    pAssoc->Release();
+                    PremultiplyAlpha(hbmIconRaw, &hbmPremult);
+                }
+                else
+                {
+                    eed.hbmIconMenu = MenuIconToBitmap(hicon);
                 }
 
-                hr = S_OK;
+                if (hbmPremult)
+                {
+                    eed.hbmIcon = hbmPremult;
+                    DeleteObject(hbmIconRaw);
+                }
+                else
+                {
+                    eed.hbmIcon = hbmIconRaw;
+                }
+
+                CoTaskMemFree(pszIconPath);
             }
-            pEnum->Release();
+
+            _vExternEditors.Push(eed);
+            pAssoc->Release();
         }
+
+        hr = S_OK;
     }
+    pEnum->Release();
+
+    if (hmShell32)
+        FreeLibrary(hmShell32);
 
     return hr;
 }
