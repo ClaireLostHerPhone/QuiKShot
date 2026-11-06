@@ -74,6 +74,8 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PTSTR pCmdL
         );
     }
 
+    CodecsInit();
+
     if (!(GetOSVersion()->flags & OSVF_WINE))
     {
         // This does not work on some platforms for some reason.

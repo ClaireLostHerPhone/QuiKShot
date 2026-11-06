@@ -1197,6 +1197,7 @@ STDMETHODIMP CEnumAssocHandlersQS::QueryInterface(const IID &riid, void **ppvOut
     return E_NOINTERFACE;
 }
 
+// QuiKShot's own clone of SHAssocEnumHandlers, in case the OS function is not available.
 HRESULT WINAPI QSAssocEnumHandlers(const TCHAR *pszExtra, ASSOC_FILTER afFilter, IEnumAssocHandlers **ppEnumHandler)
 {
     HRESULT hr = E_FAIL;
@@ -1226,6 +1227,41 @@ HRESULT WINAPI QSAssocEnumHandlers(const TCHAR *pszExtra, ASSOC_FILTER afFilter,
     return hr;
 }
 
+// static
+int CEditorActionsStrip::_CompareIsKnownImageEditor(const void *pvA, const void *pvB)
+{
+    ExternalEditorDef *peedA = (ExternalEditorDef *)pvA;
+    ExternalEditorDef *peedB = (ExternalEditorDef *)pvB;
+
+    static const const TCHAR *rgszKnownImageEditors[] = {
+        TEXT("mspaint.exe"),
+        TEXT("photoshop.exe"),
+        TEXT("illustrator.exe"),
+        TEXT("fireworks.exe"),
+        TEXT("paintdotnet.exe"),
+    };
+
+    FOR_EACH(const TCHAR *pszExeName, rgszKnownImageEditors)
+    {
+        TCHAR szLower[MAX_PATH] = { 0 };
+
+        FOR_EACH(TCHAR c, peedA->szProgramPath)
+        {
+            szLower[i] = _totlower(c);
+
+            if (c == 0)
+                break;
+        }
+
+        if (_tcsstr(szLower, pszExeName))
+        {
+            return -1;
+        }
+    }
+
+    return 1;
+}
+
 HRESULT CEditorActionsStrip::_EnumOpenWithHandlers()
 {
     HRESULT hr = E_FAIL;
@@ -1250,14 +1286,93 @@ HRESULT CEditorActionsStrip::_EnumOpenWithHandlers()
         pfnSHAssocEnumHandlers = QSAssocEnumHandlers;
     }
 
+    // Enumerate all extensions:
+    CDynamicArray<const TCHAR *> vpszExtLists;
+    CodecsEnum(_EnumCodecsProc, &vpszExtLists);
+
+    static const const TCHAR *rgszExtWhitelist[] = {
+        TEXT(".bmp"),
+        TEXT(".png"),
+    };
+
+    bool fAnyFail = false;
+    FOR_EACH_DYNARR(const TCHAR *pszExtList, vpszExtLists)
+    {
+        TCHAR szExtList[MAX_PATH];
+        _tcscpy_s(szExtList, pszExtList);
+
+        TCHAR *pszContext = nullptr;
+        TCHAR *pszToken = _tcstok_s(szExtList, TEXT(","), &pszContext);
+
+        while (pszToken != nullptr)
+        {
+            FOR_EACH(const TCHAR *pszGoodExt, rgszExtWhitelist)
+            {
+                if (_tcsicmp(pszGoodExt, pszToken) == 0)
+                {
+                    fAnyFail &= FAILED(_EnumOpenWithHandlersForExtension(pfnSHAssocEnumHandlers, pszToken));
+                }
+            }
+
+            pszToken = _tcstok_s(nullptr, TEXT(","), &pszContext);
+        }
+    }
+    hr = fAnyFail ? S_FALSE : S_OK;
+
+    // Deduplicate entries:
+    CDynamicArray<ExternalEditorDef> veedWork = _vExternEditors;
+    _vExternEditors.Clear();
+    FOR_EACH_DYNARR(ExternalEditorDef &eed, veedWork)
+    {
+        bool fAlreadyHas = false;
+        for (int j = 0; j < i; j++)
+        {
+            if (_tcsicmp(veedWork.At(j).szProgramPath, eed.szProgramPath) == 0)
+            {
+                fAlreadyHas = true;
+                break;
+            }
+        }
+
+        if (fAlreadyHas)
+        {
+            // This is a duplicated entry which will be removed, so we'll destroy all associated data
+            // to prevent a memory leak.
+            if (eed.hIcon)
+                DestroyIcon(eed.hIcon);
+            if (eed.hbmIcon)
+                DeleteObject(eed.hbmIcon);
+            if (eed.hbmIconMenu)
+                DeleteObject(eed.hbmIconMenu);
+
+            continue;
+        }
+
+        _vExternEditors.Push(eed);
+    }
+
+    // Sort by known image editors:
+    qsort(_vExternEditors.First(), _vExternEditors.GetSize(), sizeof(*_vExternEditors.First()), _CompareIsKnownImageEditor);
+
+    if (hmShell32)
+        FreeLibrary(hmShell32);
+
+    return hr;
+}
+
+HRESULT CEditorActionsStrip::_EnumOpenWithHandlersForExtension(SHAssocEnumHandlers_t pfnAssocEnumHandlers, const TCHAR *pszExt)
+{
+    HRESULT hr = E_FAIL;
+
     IEnumAssocHandlers *pEnum = nullptr;
-    if (SUCCEEDED(pfnSHAssocEnumHandlers(TEXT(".png"), ASSOC_FILTER_RECOMMENDED, &pEnum)))
+    if (SUCCEEDED(pfnAssocEnumHandlers(pszExt, ASSOC_FILTER_RECOMMENDED, &pEnum)))
     {
         IAssocHandler *pAssoc = nullptr;
         ULONG uceltFetched = 0;
         while (SUCCEEDED(pEnum->Next(1, &pAssoc, &uceltFetched)) && pAssoc)
         {
             ExternalEditorDef eed = { 0 };
+            _tcscpy_s(eed.szExt, pszExt);
 
             TCHAR *pszPath = nullptr;
             if (SUCCEEDED(pAssoc->GetName(&pszPath))) // GetName returns the path for non-UWP applications
@@ -1318,10 +1433,15 @@ HRESULT CEditorActionsStrip::_EnumOpenWithHandlers()
     }
     pEnum->Release();
 
-    if (hmShell32)
-        FreeLibrary(hmShell32);
-
     return hr;
+}
+
+// static
+bool CALLBACK CEditorActionsStrip::_EnumCodecsProc(CodecInfo *pCodecInfo, void *pvParam)
+{
+    CDynamicArray<const TCHAR *> *pvpszExts = (CDynamicArray<const TCHAR *> *)pvParam;
+    pvpszExts->Push(pCodecInfo->szExtensions);
+    return true;
 }
 
 // static
@@ -4702,7 +4822,7 @@ HRESULT CScreenshotEditorWindow::SaveImageToFileAndAccept()
 {
     if (SUCCEEDED(_ApplyChangesToImage()))
     {
-        HRESULT hr = _pScreenshotCtx->SaveToFile();
+        HRESULT hr = _pScreenshotCtx->PromptSaveToFile();
         if (SUCCEEDED(hr))
         {
             DestroyWindow(_hwnd);

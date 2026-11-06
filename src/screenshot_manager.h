@@ -62,7 +62,7 @@ public:
 
     HRESULT Crop(RECT *prcCrop);
     HRESULT CopyToClipboard();
-    HRESULT SaveToFile();
+    HRESULT PromptSaveToFile();
 
     //@Begin IScreenshotContext
     STDMETHODIMP_(HBITMAP) GetScreenshotBitmap() override
@@ -102,6 +102,32 @@ public:
     //@End IScreenshotContext
 };
 
+enum CodecProvider
+{
+    CP_BUILTIN,
+    CP_WIC,
+    CP_EXTENSION,
+};
+
+struct CodecInfo
+{
+    CodecProvider provider;
+    TCHAR szName[MAX_PATH];
+    TCHAR szExtensions[MAX_PATH]; // Comma-separated list of extensions.
+    union
+    {
+        // provider == CP_EXTENSION
+        IScreenshotEditorExtension *pOwnerExtension;
+
+        // provider == CP_WIC
+        GUID guidWicContainerFormat;
+    } providerData;
+};
+
 HRESULT RegisterScreenshotShortcut();
 void OnScreenshotKeyPressed();
 HRESULT TakeScreenshot(OUT CScreenshotContext **ppContextOut);
+
+HRESULT CodecsInit();
+typedef bool (CALLBACK *CodecsEnumProc)(CodecInfo *pCodecInfo, void *pvParam);
+HRESULT CodecsEnum(CodecsEnumProc pfnEnum, void *pvParam);

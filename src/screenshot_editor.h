@@ -103,6 +103,7 @@ private:
     {
         TCHAR szName[MAX_PATH];
         TCHAR szProgramPath[MAX_PATH];
+        TCHAR szExt[64];
         HICON hIcon;
         HBITMAP hbmIcon;
         HBITMAP hbmIconMenu; // The bitmap for the icon used in menus on old systems.
@@ -125,7 +126,11 @@ protected:
     LRESULT _OnNotify(NMHDR *pnmh, WPARAM wParam, LPARAM lParam, bool *pfHandled);
 
     HRESULT _LoadIcons();
+
     HRESULT _EnumOpenWithHandlers();
+    HRESULT _EnumOpenWithHandlersForExtension(SHAssocEnumHandlers_t pfnAssocEnumHandlers, const TCHAR *pszExt);
+    static bool CALLBACK _EnumCodecsProc(CodecInfo *pCodecInfo, void *pvParam);
+    static int _CompareIsKnownImageEditor(const void *pvA, const void *pvB);
 
 public:
     enum Command

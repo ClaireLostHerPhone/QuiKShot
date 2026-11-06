@@ -299,30 +299,128 @@ HRESULT TakeScreenshot(OUT CScreenshotContext **ppContextOut)
     return S_OK;
 }
 
+static CDynamicArray<CodecInfo> g_vCodecInfo;
+#ifdef COMPILETIME_ENABLE_WIC
+static IWICImagingFactory *g_pWicFactory;
+#endif
+
+static bool IsWicAvailable()
+{
+#ifdef COMPILETIME_ENABLE_WIC
+    return g_pWicFactory != nullptr;
+#else
+    // Non-Unicode builds target Windows 9x, which does not support WIC.
+    return false;
+#endif
+}
+
+static HRESULT FetchWicCodecs()
+{
+    if (!IsWicAvailable())
+    {
+        DBGPRINT(TEXT("WIC is not available on this platform. Skipping..."));
+        return E_NOTIMPL; // This result code works well enough.
+    }
+
+#ifdef COMPILETIME_ENABLE_WIC
+    IEnumUnknown *pEnum = nullptr;
+    HRESULT hr = g_pWicFactory->CreateComponentEnumerator(
+        WICEncoder,
+        WICComponentEnumerateDefault,
+        &pEnum
+    );
+
+    if (SUCCEEDED(hr))
+    {
+        IUnknown *pUnk = nullptr;
+        ULONG uFetched = 0;
+        while (pEnum->Next(1, &pUnk, &uFetched) == S_OK)
+        {
+            IWICBitmapCodecInfo *pCodecInfo = nullptr;
+            hr = pUnk->QueryInterface(IID_PPV_ARGS(&pCodecInfo));
+
+            if (SUCCEEDED(hr))
+            {
+                UINT cchFriendlyName = 0;
+                WCHAR szFriendlyName[MAX_PATH] = { 0 };
+                pCodecInfo->GetFriendlyName(MAX_PATH, szFriendlyName, &cchFriendlyName);
+
+                UINT cchExtensions = 0;
+                WCHAR szExtensions[MAX_PATH] = { 0 };
+                pCodecInfo->GetFileExtensions(MAX_PATH, szExtensions, &cchExtensions);
+
+                // The file extensions are provided in a format that we already support, so we can just
+                // make a codec out of that.
+                CodecInfo ci;
+                ci.provider = CP_WIC;
+                _tcscpy_s(ci.szName, szFriendlyName);
+                _tcscpy_s(ci.szExtensions, szExtensions);
+                pCodecInfo->GetContainerFormat(&ci.providerData.guidWicContainerFormat);
+                g_vCodecInfo.Push(ci);
+
+                DBGPRINT(TEXT("Fetched codec \"%s\" with provided extensions \"%s\""), szFriendlyName, szExtensions);
+
+                pCodecInfo->Release();
+            }
+
+            pUnk->Release();
+        }
+
+        pEnum->Release();
+    }
+
+    return hr;
+#else
+    return E_NOTIMPL;
+#endif
+}
+
+static HRESULT FetchSupportedCodecs()
+{
+    g_vCodecInfo.Clear();
+
+    // Built-in BMP codec:
+    CodecInfo bmpCodec;
+    bmpCodec.provider = CP_BUILTIN;
+    _tcscpy_s(bmpCodec.szName, TEXT("Windows Bitmap Codec"));
+    _tcscpy_s(bmpCodec.szExtensions, TEXT(".bmp"));
+    g_vCodecInfo.Push(bmpCodec);
+
+#ifdef COMPILETIME_ENABLE_WIC
+    // If WIC is available, then load all codecs from it.
+    FetchWicCodecs();
+#endif
+
+    return S_OK;
+}
+
+HRESULT CodecsInit()
+{
+#ifdef COMPILETIME_ENABLE_WIC
+    HRESULT hr = CoInitialize(nullptr);
+
+    // We don't care if the WIC factory fails to be created.
+    (void)CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&g_pWicFactory));
+#endif
+    return FetchSupportedCodecs();
+}
+
+HRESULT CALLBACK CodecsEnum(CodecsEnumProc pfnEnum, void *pvParam)
+{
+    bool fAborted = false;
+
+    FOR_EACH_DYNARR(CodecInfo &pCodecInfo, g_vCodecInfo)
+    {
+        fAborted = !pfnEnum(&pCodecInfo, pvParam);
+        if (fAborted)
+            break;
+    }
+
+    return fAborted ? S_FALSE : S_OK;
+}
+
 class CSaveImage
 {
-    enum CodecProvider
-    {
-        CP_BUILTIN,
-        CP_WIC,
-        CP_EXTENSION,
-    };
-
-    struct CodecInfo
-    {
-        CodecProvider provider;
-        TCHAR szName[MAX_PATH];
-        TCHAR szExtensions[MAX_PATH]; // Comma-separated list of extensions.
-        union
-        {
-            // provider == CP_EXTENSION
-            IScreenshotEditorExtension *pOwnerExtension;
-
-            // provider == CP_WIC
-            GUID guidWicContainerFormat;
-        } providerData;
-    };
-
     struct SupportedExtension
     {
         TCHAR szExtension[64];
@@ -336,11 +434,6 @@ class CSaveImage
     };
 
     HBITMAP _hbm;
-    CDynamicArray<CodecInfo> _vCodecInfo;
-
-#ifdef COMPILETIME_ENABLE_WIC
-    IWICImagingFactory *_pWicFactory;
-#endif
 
     HRESULT _GetFilterExtensions(CDynamicArray<SupportedExtension> *pvse);
     HRESULT _GetFilterItemList(CDynamicArray<FilterItem> *pvfi);
@@ -350,8 +443,6 @@ class CSaveImage
 
     HRESULT _GetFileTypeName(const TCHAR *pszExtension, TCHAR *pszOut, int cch);
     HRESULT _GetLocalizedAllFilesString(TCHAR *pszOut, int cch);
-
-    HRESULT _FetchWicCodecs();
 
     HRESULT _EncodeImage(char **ppcData, int *pcbData, const TCHAR *pszExtension, FilterItem *pfi);
     HRESULT _EncodeBitmap(char **ppcData, int *pcbData);
@@ -367,27 +458,11 @@ public:
 
     HRESULT Initialize();
     HRESULT OpenSaveDialog();
-    inline bool IsWicAvailable()
-    {
-#ifdef COMPILETIME_ENABLE_WIC
-        return _pWicFactory != nullptr;
-#else
-        // Non-Unicode builds target Windows 9x, which does not support WIC.
-        return false;
-#endif
-    }
-
-    HRESULT FetchSupportedCodecs();
 };
 
 CSaveImage::~CSaveImage()
 {
-#ifdef COMPILETIME_ENABLE_WIC
-    if (_pWicFactory)
-        _pWicFactory->Release();
-#endif
-
-    FOR_EACH_DYNARR(CodecInfo &ci, _vCodecInfo)
+    FOR_EACH_DYNARR(CodecInfo &ci, g_vCodecInfo)
     {
         if (ci.provider == CP_EXTENSION && ci.providerData.pOwnerExtension)
         {
@@ -398,13 +473,6 @@ CSaveImage::~CSaveImage()
 
 HRESULT CSaveImage::Initialize()
 {
-#ifdef COMPILETIME_ENABLE_WIC
-    HRESULT hr = CoInitialize(nullptr);
-
-    // We don't care if the WIC factory fails to be created.
-    (void)CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&_pWicFactory));
-#endif
-
     return S_OK;
 }
 
@@ -481,28 +549,9 @@ HRESULT CSaveImage::OpenSaveDialog()
     return hr;
 }
 
-HRESULT CSaveImage::FetchSupportedCodecs()
-{
-    _vCodecInfo.Clear();
-
-    // Built-in BMP codec:
-    CodecInfo bmpCodec;
-    bmpCodec.provider = CP_BUILTIN;
-    _tcscpy_s(bmpCodec.szName, TEXT("Windows Bitmap Codec"));
-    _tcscpy_s(bmpCodec.szExtensions, TEXT(".bmp"));
-    _vCodecInfo.Push(bmpCodec);
-
-#ifdef COMPILETIME_ENABLE_WIC
-    // If WIC is available, then load all codecs from it.
-    _FetchWicCodecs();
-#endif
-
-    return S_OK;
-}
-
 HRESULT CSaveImage::_GetFilterExtensions(CDynamicArray<SupportedExtension> *pvse)
 {
-    FOR_EACH_DYNARR(CodecInfo &ci, _vCodecInfo)
+    FOR_EACH_DYNARR(CodecInfo &ci, g_vCodecInfo)
     {
         TCHAR szExtensionList[MAX_PATH] = { 0 };
         _tcscpy_s(szExtensionList, ci.szExtensions);
@@ -688,67 +737,6 @@ HRESULT CSaveImage::_GetLocalizedAllFilesString(TCHAR *pszOut, int cch)
     return hr;
 }
 
-HRESULT CSaveImage::_FetchWicCodecs()
-{
-    if (!IsWicAvailable())
-    {
-        DBGPRINT(TEXT("WIC is not available on this platform. Skipping..."));
-        return E_NOTIMPL; // This result code works well enough.
-    }
-
-#ifdef COMPILETIME_ENABLE_WIC
-    IEnumUnknown *pEnum = nullptr;
-    HRESULT hr = _pWicFactory->CreateComponentEnumerator(
-        WICEncoder,
-        WICComponentEnumerateDefault,
-        &pEnum
-    );
-
-    if (SUCCEEDED(hr))
-    {
-        IUnknown *pUnk = nullptr;
-        ULONG uFetched = 0;
-        while (pEnum->Next(1, &pUnk, &uFetched) == S_OK)
-        {
-            IWICBitmapCodecInfo *pCodecInfo = nullptr;
-            hr = pUnk->QueryInterface(IID_PPV_ARGS(&pCodecInfo));
-
-            if (SUCCEEDED(hr))
-            {
-                UINT cchFriendlyName = 0;
-                WCHAR szFriendlyName[MAX_PATH] = { 0 };
-                pCodecInfo->GetFriendlyName(MAX_PATH, szFriendlyName, &cchFriendlyName);
-
-                UINT cchExtensions = 0;
-                WCHAR szExtensions[MAX_PATH] = { 0 };
-                pCodecInfo->GetFileExtensions(MAX_PATH, szExtensions, &cchExtensions);
-
-                // The file extensions are provided in a format that we already support, so we can just
-                // make a codec out of that.
-                CodecInfo ci;
-                ci.provider = CP_WIC;
-                _tcscpy_s(ci.szName, szFriendlyName);
-                _tcscpy_s(ci.szExtensions, szExtensions);
-                pCodecInfo->GetContainerFormat(&ci.providerData.guidWicContainerFormat);
-                _vCodecInfo.Push(ci);
-
-                DBGPRINT(TEXT("Fetched codec \"%s\" with provided extensions \"%s\""), szFriendlyName, szExtensions);
-
-                pCodecInfo->Release();
-            }
-
-            pUnk->Release();
-        }
-
-        pEnum->Release();
-    }
-
-    return hr;
-#else
-    return E_NOTIMPL;
-#endif
-}
-
 HRESULT CSaveImage::_EncodeImage(char **ppcData, int *pcbData, const TCHAR *pszExtension, FilterItem *pfi)
 {
     if (!ppcData || !pcbData || !pszExtension || !pfi)
@@ -756,7 +744,7 @@ HRESULT CSaveImage::_EncodeImage(char **ppcData, int *pcbData, const TCHAR *pszE
 
     FOR_EACH_DYNARR(int idx, pfi->extension.vuiOffsetProviders)
     {
-        CodecInfo *pci = &_vCodecInfo[idx];
+        CodecInfo *pci = &g_vCodecInfo[idx];
 
         if (pci->provider == CP_EXTENSION)
         {
@@ -830,7 +818,7 @@ HRESULT CSaveImage::_EncodeWIC(GUID *pEncoderGuid, char **ppcData, int *pcbData)
 {
 #ifdef COMPILETIME_ENABLE_WIC
     CComPtr<IWICBitmap> spBitmap;
-    HRESULT hr = _pWicFactory->CreateBitmapFromHBITMAP(_hbm, nullptr, WICBitmapIgnoreAlpha, &spBitmap);
+    HRESULT hr = g_pWicFactory->CreateBitmapFromHBITMAP(_hbm, nullptr, WICBitmapIgnoreAlpha, &spBitmap);
     
     if (FAILED(hr))
         return hr;
@@ -841,7 +829,7 @@ HRESULT CSaveImage::_EncodeWIC(GUID *pEncoderGuid, char **ppcData, int *pcbData)
         return hr;
 
     CComPtr<IWICStream> spStream;
-    hr = _pWicFactory->CreateStream(&spStream);
+    hr = g_pWicFactory->CreateStream(&spStream);
     if (FAILED(hr))
         return hr;
 
@@ -850,7 +838,7 @@ HRESULT CSaveImage::_EncodeWIC(GUID *pEncoderGuid, char **ppcData, int *pcbData)
         return hr;
 
     CComPtr<IWICBitmapEncoder> spEncoder;
-    hr = _pWicFactory->CreateEncoder(*pEncoderGuid, nullptr, &spEncoder);
+    hr = g_pWicFactory->CreateEncoder(*pEncoderGuid, nullptr, &spEncoder);
     if (FAILED(hr))
         return hr;
 
@@ -1037,14 +1025,9 @@ HRESULT CScreenshotContext::CopyToClipboard()
     return S_OK;
 }
 
-HRESULT CScreenshotContext::SaveToFile()
+HRESULT CScreenshotContext::PromptSaveToFile()
 {
     CSaveImage si(_hbmModified);
     si.Initialize();
-
-    // TEMPORARY -- I just need to get this called somehow so I can analyze
-    // shit in real time.
-    si.FetchSupportedCodecs();
-
     return si.OpenSaveDialog();
 }
