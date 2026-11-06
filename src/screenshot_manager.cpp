@@ -424,7 +424,7 @@ class CSaveImage
     struct SupportedExtension
     {
         TCHAR szExtension[64];
-        CDynamicArray<UINT> vuiOffsetProviders;
+        CDynamicArray<UINT> vuiOffsetCodecInfo;
     };
     
     struct FilterItem
@@ -444,9 +444,13 @@ class CSaveImage
     HRESULT _GetFileTypeName(const TCHAR *pszExtension, TCHAR *pszOut, int cch);
     HRESULT _GetLocalizedAllFilesString(TCHAR *pszOut, int cch);
 
+    HRESULT _EncodeImage(char **ppcData, int *pcbData, const TCHAR *pszExtension, SupportedExtension *pse);
     HRESULT _EncodeImage(char **ppcData, int *pcbData, const TCHAR *pszExtension, FilterItem *pfi);
+    HRESULT _EncodeImage(char **ppcData, int *pcbData, const TCHAR *pszExtension);
     HRESULT _EncodeBitmap(char **ppcData, int *pcbData);
     HRESULT _EncodeWIC(GUID *pEncoderGuid, char **ppcData, int *pcbData);
+
+    HRESULT _SaveToFile(const TCHAR *pszFileName, const char *pcData, const int cbData);
 
 public:
     CSaveImage(HBITMAP hbm)
@@ -458,6 +462,7 @@ public:
 
     HRESULT Initialize();
     HRESULT OpenSaveDialog();
+    HRESULT SaveToFile(const TCHAR *pszFile);
 };
 
 CSaveImage::~CSaveImage()
@@ -529,24 +534,27 @@ HRESULT CSaveImage::OpenSaveDialog()
             return E_FAIL;
         }
 
-        HANDLE hf = CreateFile(szFileName, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (hf != INVALID_HANDLE_VALUE)
-        {
-            DWORD dwBytesWritten = 0;
-            WriteFile(hf, pcData, cbData, &dwBytesWritten, nullptr);
-            hr = S_OK;
-        }
-        else
-        {
-            hr = HRESULT_FROM_WIN32(GetLastError());
-        }
-
+        hr = _SaveToFile(szFileName, pcData, cbData);
+        
         delete[] pcData;
-        CloseHandle(hf);
     }
 
     delete[] pszFilter;
     return hr;
+}
+
+HRESULT CSaveImage::SaveToFile(const TCHAR *pszFileName)
+{
+    const TCHAR *pszExtension = PathFindFileExtension(pszFileName);
+
+    char *pcData = nullptr;
+    int cbData = 0;
+    if (FAILED(_EncodeImage(&pcData, &cbData, pszExtension)))
+    {
+        return E_FAIL;
+    }
+
+    return _SaveToFile(pszFileName, pcData, cbData);
 }
 
 HRESULT CSaveImage::_GetFilterExtensions(CDynamicArray<SupportedExtension> *pvse)
@@ -569,7 +577,7 @@ HRESULT CSaveImage::_GetFilterExtensions(CDynamicArray<SupportedExtension> *pvse
                 if (_tcscmp(se.szExtension, pszToken) == 0)
                 {
                     // Then add this provider to the existing supported extension.
-                    se.vuiOffsetProviders.Push(uiIndex);
+                    se.vuiOffsetCodecInfo.Push(uiIndex);
                     fHandled = true;
                 }
             }
@@ -579,7 +587,7 @@ HRESULT CSaveImage::_GetFilterExtensions(CDynamicArray<SupportedExtension> *pvse
             {
                 SupportedExtension se = { 0 };
                 _tcscpy_s(se.szExtension, pszToken);
-                se.vuiOffsetProviders.Push(uiIndex);
+                se.vuiOffsetCodecInfo.Push(uiIndex);
                 pvse->Push(se);
             }
 
@@ -737,12 +745,9 @@ HRESULT CSaveImage::_GetLocalizedAllFilesString(TCHAR *pszOut, int cch)
     return hr;
 }
 
-HRESULT CSaveImage::_EncodeImage(char **ppcData, int *pcbData, const TCHAR *pszExtension, FilterItem *pfi)
+HRESULT CSaveImage::_EncodeImage(char **ppcData, int *pcbData, const TCHAR *pszExtension, SupportedExtension *pse)
 {
-    if (!ppcData || !pcbData || !pszExtension || !pfi)
-        return E_POINTER;
-
-    FOR_EACH_DYNARR(int idx, pfi->extension.vuiOffsetProviders)
+    FOR_EACH_DYNARR(int idx, pse->vuiOffsetCodecInfo)
     {
         CodecInfo *pci = &g_vCodecInfo[idx];
 
@@ -761,8 +766,43 @@ HRESULT CSaveImage::_EncodeImage(char **ppcData, int *pcbData, const TCHAR *pszE
         }
     }
 
-    // There is no good provider for the selected extension.
     return E_FAIL;
+}
+
+HRESULT CSaveImage::_EncodeImage(char **ppcData, int *pcbData, const TCHAR *pszExtension, FilterItem *pfi)
+{
+    if (!ppcData || !pcbData || !pszExtension || !pfi)
+        return E_POINTER;
+
+    return _EncodeImage(ppcData, pcbData, pszExtension, &pfi->extension);
+}
+
+HRESULT CSaveImage::_EncodeImage(char **ppcData, int *pcbData, const TCHAR *pszExtension)
+{
+    if (!ppcData || !pcbData || !pszExtension)
+        return E_POINTER;
+
+    CDynamicArray<SupportedExtension> vExts;
+    HRESULT hr = _GetFilterExtensions(&vExts);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    SupportedExtension *pCurExt = nullptr;
+    FOR_EACH_DYNARR(SupportedExtension &se, vExts)
+    {
+        if (_tcsicmp(se.szExtension, pszExtension) == 0)
+        {
+            pCurExt = &se;
+            break;
+        }
+    }
+
+    if (!pCurExt)
+        return E_FAIL;
+
+    return _EncodeImage(ppcData, pcbData, pszExtension, pCurExt);
 }
 
 HRESULT CSaveImage::_EncodeBitmap(char **ppcData, int *pcbData)
@@ -929,6 +969,26 @@ HRESULT CSaveImage::_EncodeWIC(GUID *pEncoderGuid, char **ppcData, int *pcbData)
 #endif
 }
 
+HRESULT CSaveImage::_SaveToFile(const TCHAR *pszFileName, const char *pcData, const int cbData)
+{
+    HRESULT hr = E_FAIL;
+
+    HANDLE hf = CreateFile(pszFileName, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hf != INVALID_HANDLE_VALUE)
+    {
+        DWORD dwBytesWritten = 0;
+        WriteFile(hf, pcData, cbData, &dwBytesWritten, nullptr);
+        hr = S_OK;
+    }
+    else
+    {
+        hr = HRESULT_FROM_WIN32(GetLastError());
+    }
+
+    CloseHandle(hf);
+    return hr;
+}
+
 static void GetWindowPositionData(HWND hwnd, CDynamicArray<WindowPositionRecord> *pvWndPos)
 {
     WindowPositionRecord wpr = { 0 };
@@ -1030,4 +1090,11 @@ HRESULT CScreenshotContext::PromptSaveToFile()
     CSaveImage si(_hbmModified);
     si.Initialize();
     return si.OpenSaveDialog();
+}
+
+HRESULT CScreenshotContext::SaveToFile(const TCHAR *pszFilePath)
+{
+    CSaveImage si(_hbmModified);
+    si.Initialize();
+    return si.SaveToFile(pszFilePath);
 }

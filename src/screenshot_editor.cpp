@@ -11,6 +11,8 @@
 #include <ShlGuid.h>
 #include <Shlwapi.h>
 
+#undef PathAppend // QS name conflicts with shlwapi.h
+
 static HRESULT GetAdjustedObjectVisualRect(IScreenshotEditorObject *pObj, RECT *prc)
 {
     RECT rcLogical;
@@ -638,7 +640,7 @@ LRESULT CEditorActionsStrip::_OnCreate(CREATESTRUCT *pcs)
         // Only show the "open in" button if we have external editors available.
         if (SUCCEEDED(hrExternEditor))
         {
-            rgtbButTools[i].idCommand = IDM_OPENINEXTERNALEDITOR;
+            rgtbButTools[i].idCommand = IDM_EXTERNEDITFIRST;
             rgtbButTools[i].iString = (INT_PTR)TEXT("Open in...");
             rgtbButTools[i].fsState = TBSTATE_ENABLED;
             rgtbButTools[i].fsStyle = BTNS_BUTTON | BTNS_AUTOSIZE | BTNS_DROPDOWN;
@@ -697,7 +699,58 @@ LRESULT CEditorActionsStrip::_OnCommand(WPARAM wParam, LPARAM lParam)
 {
     HWND hwndEditor = _pEditor->GetHWND();
 
-    switch (LOWORD(wParam))
+    UINT uMsg = LOWORD(wParam);
+
+    if (uMsg >= IDM_EXTERNEDITFIRST && uMsg <= IDM_EXTERNEDITLAST)
+    {
+        // Validate that the external editor exists. If we are requesting an out-of-bounds ID, then fail.
+        if (uMsg - IDM_EXTERNEDITFIRST >= _vExternEditors.GetSize())
+        {
+            return -1;
+        }
+
+        ExternalEditorDef *peed = &_vExternEditors.At(uMsg - IDM_EXTERNEDITFIRST);
+
+        // Save the screenshot to a temporary file:
+        TCHAR szTempPath[MAX_PATH];
+        GetTempPath(MAX_PATH, szTempPath);
+        PathAppend(szTempPath, TEXT("quikshot_image"));
+        _tcscat_s(szTempPath, peed->szExt);
+        SendMessage(hwndEditor, CScreenshotEditorWindow::WM_SSE_SAVEIMAGETEMP, 0, (LPARAM)szTempPath);
+
+        // Wait until the file exists...
+        bool fFileExists = false;
+        int iTimes = 0;
+        do
+        {
+            DWORD dwAttributes = GetFileAttributes(szTempPath);
+
+            if (dwAttributes != INVALID_FILE_ATTRIBUTES && !(dwAttributes & FILE_ATTRIBUTE_DIRECTORY))
+            {
+                fFileExists = true;
+                break;
+            }
+
+            iTimes++;
+            Sleep(20);
+        }
+        while (!fFileExists && iTimes < 20);
+
+        // Open the file in the external editor:
+        ShellExecute(
+            nullptr,
+            TEXT("open"),
+            peed->szProgramPath,
+            szTempPath,
+            nullptr,
+            SW_SHOWDEFAULT
+        );
+
+        DestroyWindow(hwndEditor);
+        return 0;
+    }
+
+    switch (uMsg)
     {
         case IDM_DISCARD:
         {
@@ -714,12 +767,6 @@ LRESULT CEditorActionsStrip::_OnCommand(WPARAM wParam, LPARAM lParam)
         case IDM_SAVE:
         {
             SendMessage(hwndEditor, CScreenshotEditorWindow::WM_SSE_SAVEIMAGE, 0, 0);
-            break;
-        }
-
-        case IDM_OPENINEXTERNALEDITOR:
-        {
-            MessageBox(hwndEditor, TEXT("This operation has yet to be implemented."), TEXT("Unimplemented!"), MB_OK | MB_ICONERROR);
             break;
         }
     }
@@ -864,7 +911,6 @@ class CAssocHandlerQS : public IAssocHandler
 
     HRESULT _GetApplicationKeyPath(const TCHAR *pszApp, TCHAR *pszKey, int cch)
     {
-#undef PathAppend // QS name conflicts with shlwapi.h
         _tcscpy_s(pszKey, cch, TEXT("Applications"));
 
         if (SUCCEEDED(PathAppend(pszKey, pszApp)))
@@ -3289,6 +3335,12 @@ LRESULT CScreenshotEditorWindow::v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, 
             return 0;
         }
 
+        case WM_SSE_SAVEIMAGETEMP:
+        {
+            SaveImageTemp((const TCHAR *)lParam);
+            return 0;
+        }
+
         case WM_SSE_SHOWCURSOR:
         {
             _pRenderer->ShowCursor();
@@ -4811,7 +4863,7 @@ HRESULT CScreenshotEditorWindow::CopyToClipboardAndAccept()
     }
     else
     {
-        MessageBox(_hwnd, TEXT("Failed to crop image."), TEXT("Error"), MB_OK | MB_ICONERROR);
+        MessageBox(_hwnd, TEXT("Failed to apply changes to image."), TEXT("Error"), MB_OK | MB_ICONERROR);
         return E_FAIL;
     }
 
@@ -4839,7 +4891,27 @@ HRESULT CScreenshotEditorWindow::SaveImageToFileAndAccept()
     }
     else
     {
-        MessageBox(_hwnd, TEXT("Failed to crop image."), TEXT("Error"), MB_OK | MB_ICONERROR);
+        MessageBox(_hwnd, TEXT("Failed to apply changes to image."), TEXT("Error"), MB_OK | MB_ICONERROR);
+        return E_FAIL;
+    }
+
+    return S_OK;
+}
+
+HRESULT CScreenshotEditorWindow::SaveImageTemp(const TCHAR *pszTempPath)
+{
+    if (SUCCEEDED(_ApplyChangesToImage()))
+    {
+        HRESULT hr = _pScreenshotCtx->SaveToFile(pszTempPath);
+        if (FAILED(hr))
+        {
+            MessageBox(_hwnd, TEXT("Failed to save image to temporary file."), TEXT("Error"), MB_OK | MB_ICONERROR);
+            return E_FAIL;
+        }
+    }
+    else
+    {
+        MessageBox(_hwnd, TEXT("Failed to apply changes to image."), TEXT("Error"), MB_OK | MB_ICONERROR);
         return E_FAIL;
     }
 

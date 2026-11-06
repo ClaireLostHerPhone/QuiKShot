@@ -177,6 +177,7 @@ const TCHAR *PathFindFileExtension(const TCHAR *pszPath)
         if (*c == TEXT('.'))
         {
             pc = c;
+            break;
         }
     }
 

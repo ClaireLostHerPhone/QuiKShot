@@ -138,7 +138,6 @@ public:
         IDM_DISCARD = 100,
         IDM_COPY,
         IDM_SAVE,
-        IDM_OPENINEXTERNALEDITOR,
 
         IDM_EXTERNEDITMANAGE = 200,
         IDM_EXTERNEDITFIRST = 201,
@@ -724,6 +723,7 @@ public:
         WM_SSE_CHANGETOOL,
         WM_SSE_COPYTOCLIPBOARD,
         WM_SSE_SAVEIMAGE,
+        WM_SSE_SAVEIMAGETEMP,
         WM_SSE_SHOWCURSOR,
         WM_SSE_HIDECURSOR,
     };
@@ -792,6 +792,7 @@ public:
     HRESULT RefreshPropertiesUI();
     HRESULT CopyToClipboardAndAccept();
     HRESULT SaveImageToFileAndAccept();
+    HRESULT SaveImageTemp(const TCHAR *pszTempPath);
     int GetExtensionToolCount();
     HRESULT GetExtensionToolInfo(int idx, OUT ExtensionToolInfo *pExtToolInfo);
 

@@ -63,6 +63,7 @@ public:
     HRESULT Crop(RECT *prcCrop);
     HRESULT CopyToClipboard();
     HRESULT PromptSaveToFile();
+    HRESULT SaveToFile(const TCHAR *pszFilePath);
 
     //@Begin IScreenshotContext
     STDMETHODIMP_(HBITMAP) GetScreenshotBitmap() override
