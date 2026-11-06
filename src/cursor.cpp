@@ -120,7 +120,7 @@ HRESULT CCursorRenderer::_DrawCursorShadow(HDC hdc, BITMAP *pbm)
                 }
                 else
                 {
-                    *pulSrc = 0x40000000;
+                    *pulSrc = 0x30000000;
                 }
 
                 pulSrc += 1;
@@ -130,42 +130,6 @@ HRESULT CCursorRenderer::_DrawCursorShadow(HDC hdc, BITMAP *pbm)
         // Apply the blur. Windows applies the box blur twice.
         _BlurCursorShadowBitmap(hbmMask32bpp);
         _BlurCursorShadowBitmap(hbmMask32bpp);
-
-#if 0 // Not good yet.
-        // Remove the cursor mask from the buffer:
-        void *pvPixels2 = new (std::nothrow) BYTE[pbm->bmWidth * pbm->bmHeight * 4];
-        GetDIBits(
-            hdcMask,
-            _hbmCursorMask,
-            0,
-            pbm->bmHeight,
-            pvPixels2,
-            &bmi,
-            DIB_RGB_COLORS
-        );
-
-        pulSrc = (ULONG *)pvPixels;
-        ULONG *pulSrc2 = (ULONG *)pvPixels2;
-        for (int y = 0; y < pbm->bmHeight; y++)
-        {
-            for (int x = 0; x < pbm->bmWidth; x++)
-            {
-                int r = GetRValue(*pulSrc2);
-                int g = GetGValue(*pulSrc2);
-                int b = GetBValue(*pulSrc2);
-
-                if (RGB(r, g, b) == RGB(0, 0, 0))
-                {
-                    *pulSrc = 0x00000000;
-                }
-
-                pulSrc2 += 1;
-                pulSrc += 1;
-            }
-        }
-
-        delete[] pvPixels2;
-#endif
 
         // Draw the shadow into the framebuffer:
         BLENDFUNCTION bf;
