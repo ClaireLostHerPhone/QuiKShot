@@ -17,6 +17,17 @@
 #define QS_TCHAR CHAR
 #endif
 
+typedef interface IScreenshotEditorTool *(CALLBACK *QSAllocTool_t)(size_t cb);
+
+#ifndef QUIKSHOT_IMPL
+inline interface IScreenshotEditorTool *QSAllocTool(size_t cb)
+{
+    HMODULE hmQS = GetModuleHandle(nullptr);
+    QSAllocTool_t pfnAllocTool = (QSAllocTool_t)GetProcAddress(hmQS, "QSAllocTool");
+    return pfnAllocTool(cb);
+}
+#endif
+
 // I don't think this would benefit from being a COM class.
 #undef INTERFACE
 #define INTERFACE IScreenshotContext
@@ -38,6 +49,11 @@ DECLARE_INTERFACE_IID_(IScreenshotEditor, IUnknown, "{0A573BD7-2C24-4602-A842-AC
     STDMETHOD(QueryInterface)(THIS_ REFIID riid, OUT void **ppvOut) PURE;
     STDMETHOD_(ULONG, AddRef)(THIS) PURE;
     STDMETHOD_(ULONG, Release)(THIS) PURE;
+
+    /**
+     * Allocates an object.
+     */
+    STDMETHOD_(interface IScreenshotEditorObject *, AllocObject)(size_t cb) PURE;
 
     /**
      * Inserts an object into the screenshot document.
@@ -544,3 +560,101 @@ DEFINE_GUID(IID_IScreenshotEditorExtension,
 // {2FE63844-CA9B-4D9A-84F9-1ACF4AD39C7E}
 DEFINE_GUID(CLSID_ScreenshotEditorExtension,
     0x2fe63844, 0xca9b, 0x4d9a, 0x84, 0xf9, 0x1a, 0xcf, 0x4a, 0xd3, 0x9c, 0x7e);
+
+#ifdef __cplusplus
+template <class T>
+inline T *QSAllocAndInitTool()
+{
+    T *pResult = (T *)QSAllocTool(sizeof(T));
+    new (pResult) T();
+    return pResult;
+}
+
+template <class T, typename A1>
+inline T *QSAllocAndInitTool(A1 a1)
+{
+    T *pResult = (T *)QSAllocTool(sizeof(T));
+    new (pResult) T(a1);
+    return pResult;
+}
+
+template <class T, typename A1, typename A2>
+inline T *QSAllocAndInitTool(A1 a1, A2 a2)
+{
+    T *pResult = (T *)QSAllocTool(sizeof(T));
+    new (pResult) T(a1, a2);
+    return pResult;
+}
+
+template <class T, typename A1, typename A2, typename A3>
+inline T *QSAllocAndInitTool(A1 a1, A2 a2, A3 a3)
+{
+    T *pResult = (T *)QSAllocTool(sizeof(T));
+    new (pResult) T(a1, a2, a3);
+    return pResult;
+}
+
+template <class T, typename A1, typename A2, typename A3, typename A4>
+inline T *QSAllocAndInitTool(A1 a1, A2 a2, A3 a3, A4 a4)
+{
+    T *pResult = (T *)QSAllocTool(sizeof(T));
+    new (pResult) T(a1, a2, a3, a4);
+    return pResult;
+}
+
+template <class T, typename A1, typename A2, typename A3, typename A4, typename A5>
+inline T *QSAllocAndInitTool(A1 a1, A2 a2, A3 a3, A4 a4, A5 a5)
+{
+    T *pResult = (T *)QSAllocTool(sizeof(T));
+    new (pResult) T(a1, a2, a3, a4, a5);
+    return pResult;
+}
+
+template <class T>
+inline T *QSAllocAndInitObject(IScreenshotEditor *pse)
+{
+    T *pResult = (T *)pse->AllocObject(sizeof(T));
+    new (pResult) T();
+    return pResult;
+}
+
+template <class T, typename A1>
+inline T *QSAllocAndInitObject(IScreenshotEditor *pse, A1 a1)
+{
+    T *pResult = (T *)pse->AllocObject(sizeof(T));
+    new (pResult) T(a1);
+    return pResult;
+}
+
+template <class T, typename A1, typename A2>
+inline T *QSAllocAndInitObject(IScreenshotEditor *pse, A1 a1, A2 a2)
+{
+    T *pResult = (T *)pse->AllocObject(sizeof(T));
+    new (pResult) T(a1, a2);
+    return pResult;
+}
+
+template <class T, typename A1, typename A2, typename A3>
+inline T *QSAllocAndInitObject(IScreenshotEditor *pse, A1 a1, A2 a2, A3 a3)
+{
+    T *pResult = (T *)pse->AllocObject(sizeof(T));
+    new (pResult) T(a1, a2, a3);
+    return pResult;
+}
+
+template <class T, typename A1, typename A2, typename A3, typename A4>
+inline T *QSAllocAndInitObject(IScreenshotEditor *pse, A1 a1, A2 a2, A3 a3, A4 a4)
+{
+    T *pResult = (T *)pse->AllocObject(sizeof(T));
+    new (pResult) T(a1, a2, a3, a4);
+    return pResult;
+}
+
+template <class T, typename A1, typename A2, typename A3, typename A4, typename A5>
+inline T *QSAllocAndInitObject(IScreenshotEditor *pse, A1 a1, A2 a2, A3 a3, A4 a4, A5 a5)
+{
+    T *pResult = (T *)pse->AllocObject(sizeof(T));
+    new (pResult) T(a1, a2, a3, a4, a5);
+    return pResult;
+}
+#endif

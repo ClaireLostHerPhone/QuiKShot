@@ -1,5 +1,7 @@
 #pragma once
 
+#define QUIKSHOT_IMPL
+
 #define NOMINMAX
 #include <windows.h>
 #include <unknwn.h>
@@ -89,4 +91,27 @@ public:                                                                         
         return _uRefCount;                                                               \
     }
 
+#define IMPLEMENT_IUNKNOWN_NODELETE                                                      \
+protected:                                                                               \
+    ULONG _uRefCount;                                                                    \
+public:                                                                                  \
+    STDMETHODIMP QueryInterface(const IID &riid, void **ppvOut) override;                \
+    STDMETHODIMP_(ULONG) AddRef() override                                               \
+    {                                                                                    \
+        _uRefCount++;                                                                    \
+        return _uRefCount;                                                               \
+    }                                                                                    \
+    STDMETHODIMP_(ULONG) Release() override                                              \
+    {                                                                                    \
+        _uRefCount--;                                                                    \
+        if (_uRefCount == 0)                                                             \
+        {                                                                                \
+            return 0;                                                                    \
+        }                                                                                \
+        return _uRefCount;                                                               \
+    }
+
+
+// Exports from main.cpp:
 extern HINSTANCE g_hinst;
+void SetQSAllocTarget(HWND hwnd);

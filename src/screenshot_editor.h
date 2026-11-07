@@ -3,6 +3,7 @@
 #include "window.h"
 #include "screenshot_manager.h"
 #include "dynarray.h"
+#include "arena.h"
 
 enum ScreenshotEditorTool
 {
@@ -581,7 +582,7 @@ class CScreenshotEditorSelectionTemplateObject
     RECT _rcPosLogical;
 
 public:
-    IMPLEMENT_IUNKNOWN;
+    IMPLEMENT_IUNKNOWN_NODELETE; // The memory is managed by the screenshot editor automatically.
 
     //@Begin IObjectWithSite
     STDMETHODIMP GetSite(REFIID riid, void **ppvSite) override;
@@ -645,6 +646,7 @@ private:
         STDMETHODIMP Clone(IEnumUnknown **ppenum) override;
     };
 
+    CArena _arenaObjs;
     CScreenshotContext *_pScreenshotCtx;
     CScreenshotEditorRendererGDI *_pRenderer;
     CEditHistoryManager *_pHistoryMgr;
@@ -699,6 +701,11 @@ protected:
     HRESULT _Undo();
     HRESULT _Redo();
 
+    inline IScreenshotEditorTool *_AllocTool(size_t cb)
+    {
+        return (IScreenshotEditorTool *)_arenaObjs.Push(cb);
+    }
+
     HRESULT _ChangeTool(ScreenshotEditorTool newTool);
     HRESULT _EnsureToolbar();
     void _ShowFloatingToolbar();
@@ -720,6 +727,7 @@ public:
     enum WM
     {
         WM_SSE_GETWINDOWPOSITIONS = WM_APP + 1,
+        WM_SSE_ALLOCTOOL = WM_APP + 2, // Keep this ID stable.
         WM_SSE_CHANGETOOL,
         WM_SSE_COPYTOCLIPBOARD,
         WM_SSE_SAVEIMAGE,
@@ -749,6 +757,10 @@ public:
     //@End IUnknown
 
     //@Begin IScreenshotEditor
+    STDMETHODIMP_(IScreenshotEditorObject *) AllocObject(size_t cb) override
+    {
+        return (IScreenshotEditorObject *)_arenaObjs.Push(cb);
+    }
     STDMETHODIMP InsertObject(IScreenshotEditorObject *pObj) override;
     STDMETHODIMP RemoveObject(IScreenshotEditorObject *pObj) override;
     STDMETHODIMP InvalidateObject(IScreenshotEditorObject *pObj) override;
@@ -768,6 +780,7 @@ public:
 
     CScreenshotEditorWindow()
         : _pScreenshotCtx(nullptr)
+        , _arenaObjs(256 * 64) // This should be a comfortable size for the arena.
         , _pRenderer(nullptr)
         , _pToolbar(nullptr)
         , _pToolProps(nullptr)

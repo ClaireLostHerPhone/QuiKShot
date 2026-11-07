@@ -110,7 +110,7 @@ STDMETHODIMP CRectangleTool::OnMouseLButtonDown(LONG x, LONG y, WPARAM flags)
 {
     if (!_pObjCur)
     {
-        CRectangleObject *pRectObj = new (std::nothrow) CRectangleObject(
+        CRectangleObject *pRectObj = QSAllocAndInitObject<CRectangleObject>(_pEditor,
             _type == TYPE_HIGHLIGHTER
                 ? CRectangleObject::TYPE_HIGHLIGHTER
                 : CRectangleObject::TYPE_SOLID

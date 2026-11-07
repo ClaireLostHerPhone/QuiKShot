@@ -19,7 +19,7 @@ private:
     RectangleToolType _type;
 
 public:
-    IMPLEMENT_IUNKNOWN;
+    IMPLEMENT_IUNKNOWN_NODELETE; // The memory is managed by the screenshot editor automatically.
 
     //@Begin IObjectWithSite
     STDMETHODIMP SetSite(IUnknown *pUnkSite) override;

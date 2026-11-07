@@ -58,7 +58,7 @@ STDMETHODIMP CRectangleToolExtension::CreateTool(REFCLSID rclsidTool, IScreensho
 {
     if (IsEqualGUID(rclsidTool, CLSID_RectangleTool))
     {
-        CRectangleTool *pTool = new (std::nothrow) CRectangleTool(CRectangleTool::TYPE_SOLID);
+        CRectangleTool *pTool = QSAllocAndInitTool<CRectangleTool>(CRectangleTool::TYPE_SOLID);
         if (pTool)
         {
             *ppToolOut = pTool;
@@ -72,7 +72,7 @@ STDMETHODIMP CRectangleToolExtension::CreateTool(REFCLSID rclsidTool, IScreensho
     }
     else if (IsEqualGUID(rclsidTool, CLSID_RectangleHighlighterTool))
     {
-        CRectangleTool *pTool = new (std::nothrow) CRectangleTool(CRectangleTool::TYPE_HIGHLIGHTER);
+        CRectangleTool *pTool = QSAllocAndInitTool<CRectangleTool>(CRectangleTool::TYPE_HIGHLIGHTER);
         if (pTool)
         {
             *ppToolOut = pTool;

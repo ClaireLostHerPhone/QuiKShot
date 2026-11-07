@@ -6,6 +6,21 @@
 #include "util.h"
 
 HINSTANCE g_hinst;
+HWND g_hwndAllocTargetCur = nullptr;
+
+#define WM_SSE_ALLOCTOOL (WM_APP + 2)
+
+void SetQSAllocTarget(HWND hwnd)
+{
+    g_hwndAllocTargetCur = hwnd;
+}
+
+extern "C" IScreenshotEditorTool *CALLBACK QSAllocTool(size_t cb)
+{
+    if (!g_hwndAllocTargetCur)
+        return nullptr;
+    return (IScreenshotEditorTool *)SendMessage(g_hwndAllocTargetCur, WM_SSE_ALLOCTOOL, 0, cb);
+}
 
 int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PTSTR pCmdLine, int nCmdShow)
 {

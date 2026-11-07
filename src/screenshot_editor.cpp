@@ -3305,6 +3305,11 @@ LRESULT CScreenshotEditorWindow::v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, 
             return _OnMouseRButtonUp(pt.x, pt.y, wParam);
         }
 
+        case WM_SSE_ALLOCTOOL:
+        {
+            return (LRESULT)_AllocTool(lParam);
+        }
+
         case WM_SSE_GETWINDOWPOSITIONS:
         {
             _HandleGetWindowPositions();
@@ -3359,6 +3364,8 @@ LRESULT CScreenshotEditorWindow::v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, 
 
 LRESULT CScreenshotEditorWindow::_OnCreate(CREATESTRUCT *pcs)
 {
+    SetQSAllocTarget(_hwnd);
+
     ASSERT_KEEP(_pScreenshotCtx = (CScreenshotContext *)pcs->lpCreateParams);
     ASSERT_KEEP(_pRenderer = new CScreenshotEditorRendererGDI(_pScreenshotCtx, _hwnd));
     if (FAILED(_pRenderer->Initialize()))
@@ -3386,6 +3393,7 @@ LRESULT CScreenshotEditorWindow::_OnCreate(CREATESTRUCT *pcs)
         _fEnumeratedWindows = true;
     }
 
+    SetQSAllocTarget(nullptr);
     return DefWindowProc(_hwnd, WM_CREATE, 0, (LPARAM)pcs);
 }
 
@@ -3872,7 +3880,8 @@ HRESULT CScreenshotEditorWindow::_HandleGetWindowPositions()
     {
         WindowPositionRecord &wpr = vWndPos[i];
 
-        CScreenshotEditorSelectionTemplateObject *pSelTemplNC = new (std::nothrow) CScreenshotEditorSelectionTemplateObject();
+        CScreenshotEditorSelectionTemplateObject *pSelTemplNC =
+            QSAllocAndInitObject<CScreenshotEditorSelectionTemplateObject>(this);
         if (pSelTemplNC)
         {
             RECT rc = wpr.rcNonclient;
@@ -3895,7 +3904,8 @@ HRESULT CScreenshotEditorWindow::_HandleGetWindowPositions()
         // would just result in duplication.
         if (fHasNonClientArea)
         {
-            CScreenshotEditorSelectionTemplateObject *pSelTemplClient = new (std::nothrow) CScreenshotEditorSelectionTemplateObject();
+            CScreenshotEditorSelectionTemplateObject *pSelTemplClient =
+                QSAllocAndInitObject<CScreenshotEditorSelectionTemplateObject>(this);
             if (pSelTemplClient)
             {
                 RECT rc = wpr.rcClient;
@@ -3945,6 +3955,8 @@ HRESULT CScreenshotEditorWindow::_ApplyChangesToImage()
 
 HRESULT CScreenshotEditorWindow::_LoadExtensionTools()
 {
+    SetQSAllocTarget(_hwnd);
+
     CExtensionIterator *pExtIterator = nullptr;
     if (SUCCEEDED(CExtensionManager::GetInstance()->IterateExtensions(&pExtIterator)))
     {
@@ -4009,6 +4021,7 @@ HRESULT CScreenshotEditorWindow::_LoadExtensionTools()
         DBGPRINT(TEXT("Failed to get CExtensionIterator. Will not load extension tools."));
     }
 
+    SetQSAllocTarget(nullptr);
     return S_OK;
 }
 
@@ -4635,7 +4648,8 @@ HRESULT CScreenshotEditorWindow::_BuildSelectionTemplatesForMonitors()
     {
         MapWindowRect(HWND_DESKTOP, _hwnd, &rc);
 
-        CScreenshotEditorSelectionTemplateObject *pSelTempl = new (std::nothrow) CScreenshotEditorSelectionTemplateObject();
+        CScreenshotEditorSelectionTemplateObject *pSelTempl = 
+            QSAllocAndInitObject<CScreenshotEditorSelectionTemplateObject>(this);
         if (pSelTempl)
         {
             pSelTempl->Move(&rc);

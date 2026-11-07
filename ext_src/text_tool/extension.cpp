@@ -57,7 +57,7 @@ STDMETHODIMP CTextEditorExtension::CreateTool(REFCLSID rclsidTool, IScreenshotEd
 {
     if (IsEqualGUID(rclsidTool, CLSID_TextEditorTool))
     {
-        CTextEditorTool *pTool = new (std::nothrow) CTextEditorTool();
+        CTextEditorTool *pTool = QSAllocAndInitTool<CTextEditorTool>();
         if (pTool)
         {
             *ppToolOut = pTool;

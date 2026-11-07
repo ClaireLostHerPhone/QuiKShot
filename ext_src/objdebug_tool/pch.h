@@ -47,3 +47,23 @@ public:                                                                         
         }                                                                                \
         return _uRefCount;                                                               \
     }
+
+#define IMPLEMENT_IUNKNOWN_NODELETE                                                      \
+protected:                                                                               \
+    ULONG _uRefCount;                                                                    \
+public:                                                                                  \
+    STDMETHODIMP QueryInterface(const IID &riid, void **ppvOut) override;                \
+    STDMETHODIMP_(ULONG) AddRef() override                                               \
+    {                                                                                    \
+        _uRefCount++;                                                                    \
+        return _uRefCount;                                                               \
+    }                                                                                    \
+    STDMETHODIMP_(ULONG) Release() override                                              \
+    {                                                                                    \
+        _uRefCount--;                                                                    \
+        if (_uRefCount == 0)                                                             \
+        {                                                                                \
+            return 0;                                                                    \
+        }                                                                                \
+        return _uRefCount;                                                               \
+    }

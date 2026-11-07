@@ -57,7 +57,8 @@ STDMETHODIMP CObjectDebugExtension::CreateTool(REFCLSID rclsidTool, IScreenshotE
 {
     if (IsEqualGUID(rclsidTool, CLSID_TextEditorTool))
     {
-        CObjectDebugTool *pTool = new (std::nothrow) CObjectDebugTool();
+        CObjectDebugTool *pTool = QSAllocAndInitTool<CObjectDebugTool>();
+        new (pTool) CObjectDebugTool();
         if (pTool)
         {
             *ppToolOut = pTool;
