@@ -398,7 +398,7 @@ DECLARE_INTERFACE_IID_(IScreenshotEditorPropertyProvider, IObjectWithSite, "{9D9
     /**
      * Gets an array of properties provided by the tool.
      */
-    STDMETHOD(GetProperties)(THIS_ SAFEARRAY **ppsaProperties) PURE;
+    STDMETHOD(GetEnumProperties)(THIS_ IEnumUnknown **ppEnumProps) PURE;
 
     /**
      * Called when a tool property is changed.

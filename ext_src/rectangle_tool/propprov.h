@@ -1,6 +1,25 @@
 #pragma once
 #include "pch.h"
 
+class CEnumProperties : public IEnumUnknown
+{
+    class CPropertyProvider *_pPropProvider;
+    UINT _uiIdx = 0;
+
+public:
+    IMPLEMENT_IUNKNOWN;
+
+    CEnumProperties(class CPropertyProvider *pPropProvider)
+        : _pPropProvider(pPropProvider)
+    {
+    }
+
+    STDMETHODIMP Next(ULONG celt, IUnknown **rgelt, ULONG *pceltFetched) override;
+    STDMETHODIMP Skip(ULONG celt) override;
+    STDMETHODIMP Reset() override;
+    STDMETHODIMP Clone(IEnumUnknown **ppenum) override;
+};
+
 class CPropertyProvider
     : public IScreenshotEditorPropertyProvider
 {
@@ -16,7 +35,7 @@ class CPropertyProvider
     HRESULT _InitializeProperties();
 
 public:
-    IMPLEMENT_IUNKNOWN;
+    IMPLEMENT_IUNKNOWN_NODELETE; // This is not heap-allocated.
 
     //@Begin IObjectWithSite
     STDMETHODIMP SetSite(IUnknown *pUnkSite) override;
@@ -24,7 +43,7 @@ public:
     //@End IObjectWithSite
 
     //@Begin IScreenshotEditorPropertyProvider
-    STDMETHODIMP GetProperties(SAFEARRAY **ppsaProperties) override;
+    STDMETHODIMP GetEnumProperties(OUT IEnumUnknown **pEnumOut) override;
     STDMETHODIMP OnPropertyChanged(IScreenshotEditorToolProperty *pProperty) override;
     //@End IScreenshotEditorPropertyProvider
 
@@ -37,4 +56,6 @@ public:
         , _crBorder(RGB(0, 0, 0))
     {
     }
+
+    friend class CEnumProperties;
 };

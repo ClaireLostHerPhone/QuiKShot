@@ -57,31 +57,17 @@ STDMETHODIMP CPropertyProvider::SetSite(IUnknown *pUnkSite)
     return hr;
 }
 
-STDMETHODIMP CPropertyProvider::GetProperties(SAFEARRAY **ppsaProperties)
+STDMETHODIMP CPropertyProvider::GetEnumProperties(OUT IEnumUnknown **pEnumOut)
 {
-    if (!ppsaProperties)
+    if (!pEnumOut)
         return E_POINTER;
 
     _InitializeProperties();
 
-    *ppsaProperties = SafeArrayCreateVector(VT_VOID, 0, c_iNumProperties);
-    if (!*ppsaProperties)
+    *pEnumOut = new CEnumProperties(this);
+    if (!*pEnumOut)
         return E_OUTOFMEMORY;
-
-    LONG i = 0;
-    if (FAILED(SafeArrayPutElement(*ppsaProperties, &i, _pPropColorFill)))
-    {
-        SafeArrayDestroy(*ppsaProperties);
-        return E_FAIL;
-    }
-
-    i++;
-    if (FAILED(SafeArrayPutElement(*ppsaProperties, &i, _pPropColorBorder)))
-    {
-        SafeArrayDestroy(*ppsaProperties);
-        return E_FAIL;
-    }
-
+    (*pEnumOut)->AddRef();
     return S_OK;
 }
 
@@ -106,5 +92,68 @@ STDMETHODIMP CPropertyProvider::OnPropertyChanged(IScreenshotEditorToolProperty 
 
     // TODO: Consider how to get this reported over to the owner object.
 
+    return S_OK;
+}
+
+STDMETHODIMP CEnumProperties::QueryInterface(const IID &riid, void **ppvOut)
+{
+    if (IsEqualGUID(riid, IID_IUnknown)
+        || IsEqualGUID(riid, IID_IEnumUnknown))
+    {
+        *ppvOut = this;
+        AddRef();
+        return S_OK;
+    }
+
+    return E_NOINTERFACE;
+}
+
+STDMETHODIMP CEnumProperties::Next(ULONG celt, IUnknown **rgelt, ULONG *pceltFetched)
+{
+    if (celt == 0)
+        return S_OK;
+    if (!rgelt)
+        return E_POINTER;
+    if (celt > 1 && !pceltFetched)
+        return E_POINTER;
+
+    int i = 0;
+
+    if (_uiIdx == 0)
+    {
+        rgelt[i] = _pPropProvider->_pPropColorFill;
+        _uiIdx++;
+        i++;
+    }
+
+    if (_uiIdx == 1)
+    {
+        rgelt[i] = _pPropProvider->_pPropColorBorder;
+        _uiIdx++;
+        i++;
+    }
+
+    *pceltFetched = i;
+    return S_OK;
+}
+
+STDMETHODIMP CEnumProperties::Skip(ULONG celt)
+{
+    _uiIdx += celt;
+    return S_OK;
+}
+
+STDMETHODIMP CEnumProperties::Reset()
+{
+    _uiIdx = 0;
+    return S_OK;
+}
+
+STDMETHODIMP CEnumProperties::Clone(IEnumUnknown **ppenum)
+{
+    if (!ppenum)
+        return E_POINTER;
+
+    *ppenum = new CEnumProperties(_pPropProvider);
     return S_OK;
 }

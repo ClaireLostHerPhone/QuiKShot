@@ -1661,34 +1661,20 @@ HRESULT CEditorToolProperties::_CreateToolbar()
 HRESULT CEditorToolProperties::_EnumerateProperties(
     IScreenshotEditorPropertyProvider *pProvider, CDynamicArray<IScreenshotEditorToolProperty *> *pvpProps)
 {
-    SAFEARRAY *psaProps = nullptr;
-    VARTYPE vt;
-
-    if (SUCCEEDED(SafeArrayGetVartype(psaProps, &vt)) && vt == VT_VARIANT && SUCCEEDED(pProvider->GetProperties(&psaProps)))
+    IEnumUnknown *pEnumUnknown = nullptr;
+    if (SUCCEEDED(pProvider->GetEnumProperties(&pEnumUnknown)) && pEnumUnknown)
     {
-        LONG lBoundLow = 0;
-        LONG lBoundHigh = 0;
-
-        SafeArrayGetLBound(psaProps, 0, &lBoundLow);
-        SafeArrayGetUBound(psaProps, 0, &lBoundHigh);
-
-        for (LONG i = lBoundLow; i < lBoundHigh; i++)
+        IUnknown *pUnk = nullptr;
+        ULONG celtFetched = 0;
+        while (SUCCEEDED(pEnumUnknown->Next(1, &pUnk, &celtFetched)) && pUnk)
         {
-            VARIANT *pvarElement = nullptr;
-            if (SUCCEEDED(SafeArrayGetElement(psaProps, &i, &pvarElement)))
+            IScreenshotEditorToolProperty *pProperty = nullptr;
+            if (SUCCEEDED(pUnk->QueryInterface(IID_PPV_ARGS(&pProperty))))
             {
-                if (pvarElement->vt == VT_UNKNOWN)
-                {
-                    IScreenshotEditorToolProperty *pProperty = nullptr;
-                    if (SUCCEEDED(pvarElement->punkVal->QueryInterface(IID_PPV_ARGS(&pProperty))))
-                    {
-                        pvpProps->Push(pProperty);
-                    }
-                }
+                pvpProps->Push(pProperty);
             }
+            pUnk->Release();
         }
-
-        SafeArrayDestroy(psaProps);
     }
 
     return S_OK;
