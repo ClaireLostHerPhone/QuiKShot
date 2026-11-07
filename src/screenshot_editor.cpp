@@ -1675,6 +1675,7 @@ HRESULT CEditorToolProperties::_EnumerateProperties(
             }
             pUnk->Release();
         }
+        pEnumUnknown->Release();
     }
 
     return S_OK;
