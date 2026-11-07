@@ -119,14 +119,14 @@ STDMETHODIMP CEnumProperties::Next(ULONG celt, IUnknown **rgelt, ULONG *pceltFet
 
     int i = 0;
 
-    if (_uiIdx == 0)
+    if (_uiIdx == 0 && celt--)
     {
         rgelt[i] = _pPropProvider->_pPropColorFill;
         _uiIdx++;
         i++;
     }
 
-    if (_uiIdx == 1)
+    if (_uiIdx == 1 && celt--)
     {
         rgelt[i] = _pPropProvider->_pPropColorBorder;
         _uiIdx++;
