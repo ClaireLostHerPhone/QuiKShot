@@ -81,7 +81,6 @@ STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, void **ppv)
         if (!pFac)
             return E_OUTOFMEMORY;
         HRESULT hr = pFac->QueryInterface(riid, ppv);
-        pFac->Release();
         return hr;
     }
 
