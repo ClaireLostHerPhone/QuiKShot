@@ -102,8 +102,8 @@ class CEditorActionsStrip : public CWindow<CEditorActionsStrip>
 private:
     struct ExternalEditorDef
     {
-        TCHAR szName[MAX_PATH];
-        TCHAR szProgramPath[MAX_PATH];
+        TCHAR *pszName;
+        TCHAR *pszProgramPath;
         TCHAR szExt[64];
         HICON hIcon;
         HBITMAP hbmIcon;
@@ -112,6 +112,7 @@ private:
 
     class CScreenshotEditorWindow *_pEditor;
     HWND _hwndActions;
+    CLinkedLinear _arenaExternEditorNames;
     CDynamicArray<ExternalEditorDef> _vExternEditors;
     HBITMAP _hbmIconDiscard;
     HBITMAP _hbmIconSave;
@@ -157,6 +158,7 @@ public:
     CEditorActionsStrip()
         : _pEditor(nullptr)
         , _hwndActions(nullptr)
+        , _arenaExternEditorNames(MAX_PATH * 2 * 10)
         , _hbmIconDiscard(nullptr)
         , _hbmIconCopy(nullptr)
         , _hbmIconSave(nullptr)

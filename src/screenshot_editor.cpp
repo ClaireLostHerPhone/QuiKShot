@@ -740,7 +740,7 @@ LRESULT CEditorActionsStrip::_OnCommand(WPARAM wParam, LPARAM lParam)
         ShellExecute(
             nullptr,
             TEXT("open"),
-            peed->szProgramPath,
+            peed->pszProgramPath,
             szTempPath,
             nullptr,
             SW_SHOWDEFAULT
@@ -808,8 +808,8 @@ LRESULT CEditorActionsStrip::_OnNotify(NMHDR *pnmh, WPARAM wParam, LPARAM lParam
             MENUITEMINFO mii = { sizeof(mii) };
             mii.fMask = MIIM_ID | MIIM_STRING | MIIM_BITMAP;
             mii.wID = IDM_EXTERNEDITFIRST + idxMenuItem;
-            mii.dwTypeData = (TCHAR *)eed.szName;
-            mii.cch = _tcslen(eed.szName);
+            mii.dwTypeData = (TCHAR *)eed.pszName;
+            mii.cch = _tcslen(eed.pszName);
             mii.hbmpItem = eed.hbmIconMenu ? eed.hbmIconMenu : eed.hbmIcon;
             InsertMenuItem(hMenu, idxMenuItem++, FALSE, &mii);
         }
@@ -1291,12 +1291,17 @@ int CEditorActionsStrip::_CompareIsKnownImageEditor(const void *pvA, const void 
     {
         TCHAR szLower[MAX_PATH] = { 0 };
 
-        FOR_EACH(TCHAR c, peedA->szProgramPath)
         {
-            szLower[i] = _totlower(c);
+            int j = 0;
+            TCHAR c;
+            TCHAR *pszProgramPath = peedA->pszProgramPath;
+            while ((c = *pszProgramPath++))
+            {
+                szLower[j++] = _totlower(c);
 
-            if (c == 0)
-                break;
+                if (c == 0)
+                    break;
+            }
         }
 
         if (_tcsstr(szLower, pszExeName))
@@ -1373,7 +1378,7 @@ HRESULT CEditorActionsStrip::_EnumOpenWithHandlers()
         bool fAlreadyHas = false;
         for (int j = 0; j < i; j++)
         {
-            if (_tcsicmp(veedWork.At(j).szProgramPath, eed.szProgramPath) == 0)
+            if (_tcsicmp(veedWork.At(j).pszProgramPath, eed.pszProgramPath) == 0)
             {
                 fAlreadyHas = true;
                 break;
@@ -1423,14 +1428,18 @@ HRESULT CEditorActionsStrip::_EnumOpenWithHandlersForExtension(SHAssocEnumHandle
             TCHAR *pszPath = nullptr;
             if (SUCCEEDED(pAssoc->GetName(&pszPath))) // GetName returns the path for non-UWP applications
             {
-                _tcscpy_s(eed.szProgramPath, pszPath);
+                size_t size = sizeof(TCHAR) * (_tcslen(pszPath) + 1);
+                eed.pszProgramPath = (TCHAR *)_arenaExternEditorNames.Push(size);
+                _tcscpy_s(eed.pszProgramPath, size / sizeof(TCHAR) + 1, pszPath);
                 CoTaskMemFree(pszPath);
             }
 
             TCHAR *pszName = nullptr;
             if (SUCCEEDED(pAssoc->GetUIName(&pszName)))
             {
-                _tcscpy_s(eed.szName, pszName);
+                size_t size = sizeof(TCHAR) * (_tcslen(pszName) + 1);
+                eed.pszName = (TCHAR *)_arenaExternEditorNames.Push(size);
+                _tcscpy_s(eed.pszName, size / sizeof(TCHAR) + 1, pszName);
                 CoTaskMemFree(pszName);
             }
 
