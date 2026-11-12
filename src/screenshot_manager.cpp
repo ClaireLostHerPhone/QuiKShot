@@ -991,7 +991,7 @@ HRESULT CSaveImage::_SaveToFile(const TCHAR *pszFileName, const char *pcData, co
 
 struct GetWindowPositionParams
 {
-    CArena *pArenaNames;
+    CLinkedLinear *pArenaNames;
     CDynamicArray<WindowPositionRecord> *pvWndPos;
 };
 

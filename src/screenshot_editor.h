@@ -3,7 +3,7 @@
 #include "window.h"
 #include "screenshot_manager.h"
 #include "dynarray.h"
-#include "arena.h"
+#include "ds.h"
 
 enum ScreenshotEditorTool
 {
@@ -646,7 +646,7 @@ private:
         STDMETHODIMP Clone(IEnumUnknown **ppenum) override;
     };
 
-    CArena _arenaObjs;
+    CLinkedLinear _arenaObjs;
     CScreenshotContext *_pScreenshotCtx;
     CScreenshotEditorRendererGDI *_pRenderer;
     CEditHistoryManager *_pHistoryMgr;

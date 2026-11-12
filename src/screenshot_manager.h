@@ -1,6 +1,6 @@
 #pragma once
 #include "pch.h"
-#include "arena.h"
+#include "ds.h"
 #include "dynarray.h"
 
 struct WindowPositionRecord
@@ -27,7 +27,7 @@ public:
     POINT _ptVirtualScreen;
     SIZE _sizeDesktop;
     POINT _ptCursor;
-    CArena _arenaWndPosClasses;
+    CLinkedLinear _arenaWndPosClasses;
     CDynamicArray<WindowPositionRecord> _vWndPos; // A list of all windows, from highest to lowest z-index.
     bool _fCursorVisible;
 

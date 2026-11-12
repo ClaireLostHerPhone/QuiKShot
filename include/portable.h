@@ -46,6 +46,9 @@
 #if defined(_MSVC_LANG) && _MSVC_LANG < 201103L || !defined(_MSVC_LANG) && __cplusplus < 201103L
     #define nullptr NULL
     #define constexpr const
+    #define DELETED_CTOR
+#else
+    #define DELETED_CTOR = delete
 #endif
 
 #ifndef E_BOUNDS

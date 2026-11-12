@@ -1,26 +1,30 @@
 #pragma once
 #include "pch.h"
 
-class CArena
+class CLinkedLinear
 {
     size_t _size;
     size_t _pos;
     BYTE *_pbData;
-    CArena *_pNext;
+    CLinkedLinear *_pNext;
     bool _fIsHeap;
 
     HRESULT _EnsureNext(size_t nextSize)
     {
         if (!_pNext)
         {
-            _pNext = new CArena(nextSize + _size);
+            _pNext = new CLinkedLinear(nextSize + _size);
             _pNext->_fIsHeap = true;
         }
         return _pNext ? S_OK : E_OUTOFMEMORY;
     }
 
+private:
+    CLinkedLinear(const CLinkedLinear &) DELETED_CTOR;
+    CLinkedLinear &operator=(const CLinkedLinear &) DELETED_CTOR;
+
 public:
-    CArena(size_t size)
+    CLinkedLinear(size_t size)
         : _size(size)
         , _pos(0)
         , _pNext(nullptr)
@@ -29,14 +33,14 @@ public:
         _pbData = new BYTE[size];
     }
 
-    ~CArena()
+    ~CLinkedLinear()
     {
         if (_fIsHeap)
             return;
 
-        CArena *pPrev = nullptr;
-        CArena *pCur = this;
-        CArena *pNext = nullptr;
+        CLinkedLinear *pPrev = nullptr;
+        CLinkedLinear *pCur = this;
+        CLinkedLinear *pNext = nullptr;
 
         // Reverse the linked list:
         while (pCur)
@@ -58,7 +62,7 @@ public:
                 pCur->_pbData = nullptr;
             }
 
-            CArena *pNext = pCur->_pNext;
+            CLinkedLinear *pNext = pCur->_pNext;
 
             if (pCur->_fIsHeap)
             {
