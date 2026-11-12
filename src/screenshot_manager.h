@@ -1,5 +1,6 @@
 #pragma once
 #include "pch.h"
+#include "arena.h"
 #include "dynarray.h"
 
 struct WindowPositionRecord
@@ -8,7 +9,7 @@ struct WindowPositionRecord
     HWND hwndParent;
     DWORD dwStyle;
     DWORD dwExStyle;
-    TCHAR szWindowClass[MAX_PATH];
+    TCHAR *pszWindowClass;
     RECT rcNonclient;
     RECT rcClient;
 };
@@ -26,6 +27,7 @@ public:
     POINT _ptVirtualScreen;
     SIZE _sizeDesktop;
     POINT _ptCursor;
+    CArena _arenaWndPosClasses;
     CDynamicArray<WindowPositionRecord> _vWndPos; // A list of all windows, from highest to lowest z-index.
     bool _fCursorVisible;
 
@@ -34,6 +36,7 @@ public:
         , _hbmCursorColor(nullptr)
         , _hbmCursorMask(nullptr)
         , _hbmModified(nullptr)
+        , _arenaWndPosClasses(8 * MAX_PATH)
         , _fCursorVisible(false)
     {
         ZeroMemory(&_ptVirtualScreen, sizeof(_ptVirtualScreen));
@@ -131,4 +134,4 @@ HRESULT TakeScreenshot(OUT CScreenshotContext **ppContextOut);
 
 HRESULT CodecsInit();
 typedef bool (CALLBACK *CodecsEnumProc)(CodecInfo *pCodecInfo, void *pvParam);
-HRESULT CodecsEnum(CodecsEnumProc pfnEnum, void *pvParam);
+HRESULT CALLBACK CodecsEnum(CodecsEnumProc pfnEnum, void *pvParam);

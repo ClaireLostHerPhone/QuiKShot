@@ -9,11 +9,11 @@ class CArena
     CArena *_pNext;
     bool _fIsHeap;
 
-    HRESULT _EnsureNext()
+    HRESULT _EnsureNext(size_t nextSize)
     {
         if (!_pNext)
         {
-            _pNext = new CArena(_size);
+            _pNext = new CArena(nextSize + _size);
             _pNext->_fIsHeap = true;
         }
         return _pNext ? S_OK : E_OUTOFMEMORY;
@@ -81,9 +81,12 @@ public:
 
     void *Push(size_t nBytes)
     {
-        if (_pos + nBytes > _size)
+        if (_pos + nBytes >= _size)
         {
-            LOG_IF_FAILED(_EnsureNext());
+            if (FAILED(_EnsureNext(nBytes * 2)))
+            {
+                return nullptr;
+            }
             return _pNext->Push(nBytes);
         }
         else

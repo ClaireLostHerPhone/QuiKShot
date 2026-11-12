@@ -989,7 +989,13 @@ HRESULT CSaveImage::_SaveToFile(const TCHAR *pszFileName, const char *pcData, co
     return hr;
 }
 
-static void GetWindowPositionData(HWND hwnd, CDynamicArray<WindowPositionRecord> *pvWndPos)
+struct GetWindowPositionParams
+{
+    CArena *pArenaNames;
+    CDynamicArray<WindowPositionRecord> *pvWndPos;
+};
+
+static void GetWindowPositionData(HWND hwnd, GetWindowPositionParams *pParams)
 {
     WindowPositionRecord wpr = { 0 };
 
@@ -999,11 +1005,17 @@ static void GetWindowPositionData(HWND hwnd, CDynamicArray<WindowPositionRecord>
     if (!(dwStyle & WS_VISIBLE))
         return;
 
-    GetClassName(hwnd, wpr.szWindowClass, ARRAYSIZE(wpr.szWindowClass));
+    TCHAR szWindowClass[MAX_PATH];
+    GetClassName(hwnd, szWindowClass, ARRAYSIZE(szWindowClass));
+
+    size_t sizeStr = sizeof(TCHAR) * (_tcslen(szWindowClass));
+    TCHAR *pszWindowClass = (TCHAR *)pParams->pArenaNames->Push(sizeStr);
+    _tcscpy_s(pszWindowClass, sizeStr / sizeof(TCHAR) + 1, szWindowClass);
+    wpr.pszWindowClass = pszWindowClass;
     
     // N.B. This makes it impossible to select another screenshot editor instance's bounds automatically.
     // However, that might be for the better.
-    if (_tcscmp(wpr.szWindowClass, TEXT("quikshot_ScreenshotEditorWindow")) == 0)
+    if (_tcscmp(wpr.pszWindowClass, TEXT("quikshot_ScreenshotEditorWindow")) == 0)
         return;
 
     // TODO: Support other banned window classes.
@@ -1017,21 +1029,21 @@ static void GetWindowPositionData(HWND hwnd, CDynamicArray<WindowPositionRecord>
     GetClientRect(hwnd, &wpr.rcClient);
     MapWindowPoints(hwnd, HWND_DESKTOP, (POINT *)&wpr.rcClient, 2);
 
-    pvWndPos->Push(wpr);
+    pParams->pvWndPos->Push(wpr);
 }
 
 static BOOL CALLBACK EnumChildWindowsProc(HWND hwnd, LPARAM lParam)
 {
-    CDynamicArray<WindowPositionRecord> *pvWndPos = (CDynamicArray<WindowPositionRecord> *)lParam;
-    GetWindowPositionData(hwnd, pvWndPos);
+    GetWindowPositionParams *pParams = (GetWindowPositionParams *)lParam;
+    GetWindowPositionData(hwnd, pParams);
 
     return TRUE;
 }
 
 static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam)
 {
-    CDynamicArray<WindowPositionRecord> *pvWndPos = (CDynamicArray<WindowPositionRecord> *)lParam;
-    GetWindowPositionData(hwnd, pvWndPos);
+    GetWindowPositionParams *pParams = (GetWindowPositionParams *)lParam;
+    GetWindowPositionData(hwnd, pParams);
 
     EnumChildWindows(hwnd, EnumChildWindowsProc, lParam);
 
@@ -1040,7 +1052,10 @@ static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam)
 
 HRESULT CScreenshotContext::GetWindowPositions(OnGetWindowPositionsCB cb, void *pvCbData)
 {
-    EnumWindows(EnumWindowsProc, (LPARAM)&_vWndPos);
+    GetWindowPositionParams params;
+    params.pArenaNames = &_arenaWndPosClasses;
+    params.pvWndPos = &_vWndPos;
+    EnumWindows(EnumWindowsProc, (LPARAM)&params);
     cb(pvCbData);
     return S_OK;
 }
