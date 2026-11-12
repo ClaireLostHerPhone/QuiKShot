@@ -1008,7 +1008,7 @@ static void GetWindowPositionData(HWND hwnd, GetWindowPositionParams *pParams)
     TCHAR szWindowClass[MAX_PATH];
     GetClassName(hwnd, szWindowClass, ARRAYSIZE(szWindowClass));
 
-    size_t sizeStr = sizeof(TCHAR) * (_tcslen(szWindowClass));
+    size_t sizeStr = sizeof(TCHAR) * (_tcslen(szWindowClass) + 1);
     TCHAR *pszWindowClass = (TCHAR *)pParams->pArenaNames->Push(sizeStr);
     _tcscpy_s(pszWindowClass, sizeStr / sizeof(TCHAR) + 1, szWindowClass);
     wpr.pszWindowClass = pszWindowClass;
