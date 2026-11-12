@@ -3234,6 +3234,17 @@ LRESULT CScreenshotEditorWindow::v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, 
             return _OnKeyDown(wParam, lParam);
         }
 
+        case WM_WINDOWPOSCHANGED:
+        {
+            // Keep the floating toolbar in front:
+            if (_pFloatingToolbar)
+            {
+                SetWindowPos(_pFloatingToolbar->GetHWND(), _hwnd, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+
+            break;
+        }
+
         case WM_KEYUP:
         {
             HRESULT hrExtensionTool = S_FALSE;
