@@ -101,9 +101,9 @@ static HRESULT ParseKeyboardShortcutString(const TCHAR *psz, KeyboardShortcut *p
         { 0 },
     };
 
-    size_t cb = sizeof(TCHAR) * _tcslen(psz);
+    size_t cb = sizeof(TCHAR) * _tcslen(psz) + 1;
     TCHAR *pszCopy = new TCHAR[cb];
-    _tcscpy_s(pszCopy, cb, psz);
+    _tcscpy_s(pszCopy, cb + 1, psz);
 
     TCHAR *pszContext = nullptr;
     TCHAR *pszToken = _tcstok_s(pszCopy, TEXT("+"), &pszContext);
