@@ -230,7 +230,8 @@ void OnScreenshotKeyPressed()
     HRESULT hr = TakeScreenshot(&pScreenshotCtx);
     if (SUCCEEDED(hr))
     {
-        HANDLE hThread = CreateThread(nullptr, 0, ScreenshotWindowThreadProc, pScreenshotCtx, 0, nullptr);
+        DWORD dwThreadId = 0;
+        HANDLE hThread = CreateThread(nullptr, 0, ScreenshotWindowThreadProc, pScreenshotCtx, 0, &dwThreadId);
         if (!hThread)
         {
             MessageBox(nullptr,
@@ -254,10 +255,24 @@ HRESULT TakeScreenshot(OUT CScreenshotContext **ppContextOut)
     // Take the screenshot of the desktop:
     //
     HDC hdcDesktop = GetDC(HWND_DESKTOP);
-    int cxDesktop = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    int cyDesktop = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-    int xDesktop = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    int yDesktop = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    int cxDesktop;
+    int cyDesktop;
+    int xDesktop;
+    int yDesktop;
+    if (PortableIsMultiMonitorSupportAvailable())
+    {
+        cxDesktop = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        cyDesktop = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        xDesktop = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        yDesktop = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    }
+    else
+    {
+        cxDesktop = GetSystemMetrics(SM_CXSCREEN);
+        cyDesktop = GetSystemMetrics(SM_CYSCREEN);
+        xDesktop = 0;
+        yDesktop = 0;
+    }
     
     pContext->_ptVirtualScreen.x = xDesktop;
     pContext->_ptVirtualScreen.y = yDesktop;
@@ -277,7 +292,7 @@ HRESULT TakeScreenshot(OUT CScreenshotContext **ppContextOut)
     // Get cursor information.
     //
     CURSORINFO ci = { sizeof(CURSORINFO) };
-    if (GetCursorInfo(&ci))
+    if (GetCursorInfo(&ci)) // <- TODO: Portable function for Windows 95 support.
     {
         pContext->_fCursorVisible = ci.flags & CURSOR_SHOWING;
         pContext->_ptCursor = ci.ptScreenPos;

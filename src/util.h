@@ -17,7 +17,11 @@ struct OSVersion
 
     inline bool IsWindowsNT()
     {
+#ifdef _UNICODE
+        return true;
+#else
         return (flags & OSVF_WINNT);
+#endif
     }
 
     inline bool IsGreaterEqualVersion(DWORD dwMajorExpect, DWORD dwMinorExpect)

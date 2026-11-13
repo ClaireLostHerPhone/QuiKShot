@@ -260,7 +260,7 @@
 			IntermediateDirectory="..\bin\vs2005-QuiKShot-Win32-$(ConfigurationName)"
 			ConfigurationType="1"
 			CharacterSet="2"
-			WholeProgramOptimization="3"
+			WholeProgramOptimization="1"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
@@ -301,6 +301,7 @@
 			<Tool
 				Name="VCLinkerTool"
 				LinkIncremental="1"
+				IgnoreDefaultLibraryNames=""
 				GenerateDebugInformation="true"
 				SubSystem="2"
 				OptimizeReferences="2"
@@ -469,11 +470,11 @@
 				>
 			</File>
 			<File
-				RelativePath=".\Resource.h"
+				RelativePath=".\QuiKShot.h"
 				>
 			</File>
 			<File
-				RelativePath=".\QuiKShot.h"
+				RelativePath=".\Resource.h"
 				>
 			</File>
 			<File

@@ -10,12 +10,15 @@ HRESULT PortableAlphaBlend(
     HDC hdcDest, int xoriginDest, int yoriginDest, int wDest, int hDest,
     HDC hdcSrc, int xoriginSrc, int yoriginSrc, int wSrc, int hSrc, BLENDFUNCTION ftn
 );
-
 bool PortableIsAlphaBlendAvailable();
 
 HRESULT PortableAssocCreate(CLSID clsid, REFIID riid, void **ppv);
-
 bool PortableIsAssocCreateAvailable();
+
+bool PortableIsMultiMonitorSupportAvailable();
+HRESULT PortableEnumDisplayMonitors(HDC hdc, const RECT *prcClip, MONITORENUMPROC pfnEnum, LPARAM dwData);
+HMONITOR PortableMonitorFromPoint(POINT pt, DWORD dwFlags);
+HRESULT PortableGetMonitorInfo(HMONITOR hMonitor, MONITORINFO *pmi);
 
 #if NTDDI_VERSION < 0x0600
 enum _ASSOC_FILTER

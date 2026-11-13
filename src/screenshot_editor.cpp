@@ -4302,10 +4302,18 @@ HRESULT CScreenshotEditorWindow::_DetermineFloatingToolbarPosition(RECT *prcBox,
     RECT rcBoundingBox = { 0 };
     POINT ptMonitor = ptPreferred;
     MapWindowPoints(_hwnd, HWND_DESKTOP, &ptMonitor, 1);
-    HMONITOR hMonitor = MonitorFromPoint(ptMonitor, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi = { sizeof(mi) };
-    GetMonitorInfo(hMonitor, &mi);
-    rcBoundingBox = mi.rcMonitor;
+    if (PortableIsMultiMonitorSupportAvailable())
+    {
+        HMONITOR hMonitor = PortableMonitorFromPoint(ptMonitor, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi = { sizeof(mi) };
+        LOG_IF_FAILED(PortableGetMonitorInfo(hMonitor, &mi));
+        rcBoundingBox = mi.rcMonitor;
+    }
+    else
+    {
+        rcBoundingBox.right = _pScreenshotCtx->_sizeDesktop.cx;
+        rcBoundingBox.bottom = _pScreenshotCtx->_sizeDesktop.cy;
+    }
     MapWindowRect(HWND_DESKTOP, _hwnd, &rcBoundingBox);
 
     SidePreference rgSidePref[4] = {
@@ -4649,7 +4657,25 @@ HRESULT CScreenshotEditorWindow::_BuildSelectionTemplatesForMonitors()
     _pHistoryMgr->Lock();
 
     CDynamicArray<RECT> vrc;
-    EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, (LPARAM)&vrc);
+    if (FAILED(PortableEnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, (LPARAM)&vrc)))
+    {
+        // Windows 95 doesn't have multiple monitor support, so we'll just place a single object
+        // for the entire screen if this function is unavailable.
+        CScreenshotEditorSelectionTemplateObject *pSelTempl = 
+            QSAllocAndInitObject<CScreenshotEditorSelectionTemplateObject>(this);
+        if (pSelTempl)
+        {
+            RECT rc;
+            rc.left = rc.top = 0;
+            rc.right = _pScreenshotCtx->_sizeDesktop.cx;
+            rc.right = _pScreenshotCtx->_sizeDesktop.cy;
+            pSelTempl->Move(&rc);
+            InsertObject(pSelTempl);
+        }
+
+        _pHistoryMgr->Unlock();
+        return S_OK;
+    }
 
     FOR_EACH_DYNARR(RECT &rc, vrc)
     {
