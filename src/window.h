@@ -52,7 +52,7 @@ protected:
         if (!RegisterClass(pWndClass))
         {
             int lastError = GetLastError();
-            if (lastError == ERROR_CLASS_ALREADY_EXISTS)
+            if (lastError == ERROR_CLASS_ALREADY_EXISTS || lastError == ERROR_INVALID_HANDLE || lastError == ERROR_INVALID_PARAMETER)
             {
                 SetLastError(ERROR_SUCCESS);
                 return S_OK;
