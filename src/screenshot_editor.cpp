@@ -153,6 +153,7 @@ LRESULT CEditorToolbar::_OnCreate(CREATESTRUCT *pcs)
 
     if (!_hwndToolbar)
     {
+        DBGPRINT(TEXT("Failed to create toolbar window."));
         return -1;
     }
 
@@ -436,8 +437,11 @@ HRESULT CEditorToolbar::RegisterWindowClass()
 // static
 CEditorToolbar *CEditorToolbar::Create(CScreenshotEditorWindow *pEditor, DWORD dwExStyle, DWORD dwStyle, int x, int y, int cx, int cy, HWND hwndParent)
 {
-    if (FAILED(RegisterWindowClass()))
+    HRESULT hr = RegisterWindowClass();
+    LOG_IF_FAILED(hr);
+    if (FAILED(hr))
     {
+        DBGPRINT(TEXT("Failed to register CEditorToolbar window class."));
         return nullptr;
     }
 
@@ -452,6 +456,9 @@ CEditorToolbar *CEditorToolbar::Create(CScreenshotEditorWindow *pEditor, DWORD d
         g_hinst,
         pEditor
     );
+
+    if (!pWnd)
+        DBGPRINT(TEXT("Failed to create CEditorToolbar window."));
 
     return pWnd;
 }
@@ -883,6 +890,7 @@ HRESULT CEditorActionsStrip::_LoadIcons()
     return S_OK;
 }
 
+#ifdef _UNICODE
 enum AssocHandlerType
 {
     AH_EXE,
@@ -998,18 +1006,18 @@ public:
         return hr;
     }
 
-    STDMETHODIMP GetName(TCHAR **ppsz) override
+    STDMETHODIMP GetName(WCHAR **ppsz) override
     {
-        *ppsz = (TCHAR *)CoTaskMemAlloc((MAX_PATH + 1) * sizeof(TCHAR));
+        *ppsz = (WCHAR *)CoTaskMemAlloc((MAX_PATH + 1) * sizeof(WCHAR));
         if (!*ppsz)
             return E_OUTOFMEMORY;
-        _tcscpy_s(*ppsz, MAX_PATH, _szExePath);
+        wcscpy_s(*ppsz, MAX_PATH, _szExePath);
         return S_OK;
     }
 
-    STDMETHODIMP GetUIName(TCHAR **ppsz) override
+    STDMETHODIMP GetUIName(WCHAR **ppsz) override
     {
-        *ppsz = (TCHAR *)CoTaskMemAlloc((MAX_PATH + 1) * sizeof(TCHAR));
+        *ppsz = (WCHAR *)CoTaskMemAlloc((MAX_PATH + 1) * sizeof(WCHAR));
         if (!*ppsz)
             return E_OUTOFMEMORY;
         DWORD cch = MAX_PATH;
@@ -1272,6 +1280,7 @@ HRESULT WINAPI QSAssocEnumHandlers(const TCHAR *pszExtra, ASSOC_FILTER afFilter,
 
     return hr;
 }
+#endif
 
 // static
 int CEditorActionsStrip::_CompareIsKnownImageEditor(const void *pvA, const void *pvB)
@@ -1315,6 +1324,7 @@ int CEditorActionsStrip::_CompareIsKnownImageEditor(const void *pvA, const void 
 
 HRESULT CEditorActionsStrip::_EnumOpenWithHandlers()
 {
+#ifdef _UNICODE
     HRESULT hr = E_FAIL;
 
     // Open with lists are only available since Windows 2000. On earlier operating systems, we won't
@@ -1409,10 +1419,14 @@ HRESULT CEditorActionsStrip::_EnumOpenWithHandlers()
         FreeLibrary(hmShell32);
 
     return hr;
+#else
+	return E_NOTIMPL;
+#endif
 }
 
 HRESULT CEditorActionsStrip::_EnumOpenWithHandlersForExtension(SHAssocEnumHandlers_t pfnAssocEnumHandlers, const TCHAR *pszExt)
 {
+#ifdef _UNICODE
     HRESULT hr = E_FAIL;
 
     IEnumAssocHandlers *pEnum = nullptr;
@@ -1488,7 +1502,10 @@ HRESULT CEditorActionsStrip::_EnumOpenWithHandlersForExtension(SHAssocEnumHandle
     }
     pEnum->Release();
 
-    return hr;
+	return hr;
+#else
+	return E_NOTIMPL;
+#endif
 }
 
 // static
@@ -1865,7 +1882,7 @@ HRESULT CEditorFloatingToolbar::_OnCreate()
 
     _pActionStrip = CEditorActionsStrip::Create(_pEditor, 0, WS_CHILD, 0, 0, 0, 0, _hwnd);
 
-    ASSERT_KEEP(SUCCEEDED(_DoLayout()));
+    LOG_IF_FAILED(_DoLayout());
 
     ShowWindow(_pToolbarTools->GetHWND(), SW_SHOW);
     ShowWindow(_pActionStrip->GetHWND(), SW_SHOW);
@@ -4184,9 +4201,10 @@ HRESULT CScreenshotEditorWindow::_EnsureToolbar()
 {
     if (!_pToolbar)
     {
-        ASSERT_KEEP(SUCCEEDED(_LoadExtensionTools()));
+        LOG_IF_FAILED(_LoadExtensionTools());
         _pToolbar = CEditorToolbar::Create(this, 0, WS_CHILD, 0, 0, 0, 0, _hwnd);
-        _pToolbar->OnToolChanged(_tool);
+        if (_pToolbar)
+            _pToolbar->OnToolChanged(_tool);
     }
 
     if (!_pToolProps)
@@ -4993,7 +5011,9 @@ HRESULT CScreenshotEditorWindow::RegisterWindowClass()
     cls.hCursor = nullptr;
     cls.hIcon = LoadIcon(g_hinst, MAKEINTRESOURCE(IDI_APP));
 
-    return CWindow::RegisterWindowClass(&cls);
+    HRESULT hr = CWindow::RegisterWindowClass(&cls);
+    LOG_IF_FAILED(hr);
+    return hr;
 }
 
 // static
