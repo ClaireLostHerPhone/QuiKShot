@@ -10,7 +10,7 @@ QuiKShot is portable software, so it can just be run from your downloads folder.
 
 ## Uninstalling
 
-QuiKShot saves user configuration to the registry. If you wish to remove this state, please delete the registry key `HKEY_CURRENT_USER\SOFTWARE\ClaireLostHerPhone\QuiKShot`;
+QuiKShot saves user configuration to the registry. If you wish to remove this state, please delete the registry key `HKEY_CURRENT_USER\SOFTWARE\ClaireLostHerPhone\QuiKShot`.
 
 ## Building
 

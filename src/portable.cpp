@@ -95,6 +95,58 @@ HRESULT PortableGetMonitorInfo(HMONITOR hMonitor, MONITORINFO *pmi)
     return fResult ? S_OK : S_FALSE;
 }
 
+typedef BOOL (WINAPI *GetCursorInfo_t)(CURSORINFO *pci);
+GetCursorInfo_t g_pfnGetCursorInfo = nullptr;
+HRESULT PortableGetCursorInfo(CURSORINFO *pci)
+{
+    // Polyfill for Windows 95:
+    if (!g_pfnGetCursorInfo)
+    {
+        if (!pci->cbSize != sizeof(CURSORINFO))
+            return E_INVALIDARG;
+
+        GetCursorPos(&pci->ptScreenPos);
+        
+        HCURSOR hCursor = nullptr;
+        HWND hwndTarget = WindowFromPoint(pci->ptScreenPos);
+        if (!hwndTarget)
+        {
+            hCursor = GetCursor();
+        }
+
+        DWORD dwCurrentThread = GetCurrentThreadId();
+        DWORD dwTargetThread = GetWindowThreadProcessId(hwndTarget, nullptr);
+
+        if (dwTargetThread == 0 || dwTargetThread == dwCurrentThread)
+        {
+            hCursor = GetCursor();
+        }
+
+        if (AttachThreadInput(dwCurrentThread, dwTargetThread, TRUE))
+        {
+            hCursor = GetCursor();
+            AttachThreadInput(dwCurrentThread, dwTargetThread, FALSE);
+        }
+        else
+        {
+            hCursor = GetCursor();
+        }
+
+        if (hCursor)
+        {
+            pci->hCursor = hCursor;
+            pci->flags = CURSOR_SHOWING;
+        }
+        else
+        {
+            pci->hCursor = nullptr;
+            pci->flags = 0;
+        }
+    }
+
+    return g_pfnGetCursorInfo(pci);
+}
+
 HRESULT PortableInitialize()
 {
     HMODULE hmUser32 = LoadLibrary(TEXT("user32.dll"));
@@ -104,6 +156,7 @@ HRESULT PortableInitialize()
         g_pfnMonitorFromPoint = (MonitorFromPoint_t)GetProcAddress(hmUser32, "MonitorFromPoint");
         g_pfnGetMonitorInfo = (GetMonitorInfo_t)GetProcAddress(hmUser32, "GetMonitorInfo" _AWSTR);
         g_pfnGetSystemMetricsForDpi = (GetSystemMetricsForDpi_t)GetProcAddress(hmUser32, "GetSystemMetricsForDpi");
+        g_pfnGetCursorInfo = (GetCursorInfo_t)GetProcAddress(hmUser32, "GetCursorInfo");
     }
 
     HMODULE hmMsimg32 = LoadLibrary(TEXT("msimg32.dll"));

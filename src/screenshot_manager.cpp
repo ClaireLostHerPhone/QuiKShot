@@ -5,6 +5,7 @@
 #include "util.h"
 #include "dynarray.h"
 #include <objbase.h>
+#include "portablep.h"
 
 // Non-Unicode builds target Windows 9x, which does not support WIC.
 #if defined(_UNICODE)
@@ -101,9 +102,9 @@ static HRESULT ParseKeyboardShortcutString(const TCHAR *psz, KeyboardShortcut *p
         { 0 },
     };
 
-    size_t cb = sizeof(TCHAR) * _tcslen(psz) + 1;
+    size_t cb = sizeof(TCHAR) * (_tcslen(psz) + 1);
     TCHAR *pszCopy = new TCHAR[cb];
-    _tcscpy_s(pszCopy, cb + 1, psz);
+    _tcscpy_s(pszCopy, cb, psz);
 
     TCHAR *pszContext = nullptr;
     TCHAR *pszToken = _tcstok_s(pszCopy, TEXT("+"), &pszContext);
@@ -292,7 +293,7 @@ HRESULT TakeScreenshot(OUT CScreenshotContext **ppContextOut)
     // Get cursor information.
     //
     CURSORINFO ci = { sizeof(CURSORINFO) };
-    if (GetCursorInfo(&ci)) // <- TODO: Portable function for Windows 95 support.
+    if (PortableGetCursorInfo(&ci)) // <- TODO: Portable function for Windows 95 support.
     {
         pContext->_fCursorVisible = ci.flags & CURSOR_SHOWING;
         pContext->_ptCursor = ci.ptScreenPos;

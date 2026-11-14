@@ -19,6 +19,7 @@ bool PortableIsMultiMonitorSupportAvailable();
 HRESULT PortableEnumDisplayMonitors(HDC hdc, const RECT *prcClip, MONITORENUMPROC pfnEnum, LPARAM dwData);
 HMONITOR PortableMonitorFromPoint(POINT pt, DWORD dwFlags);
 HRESULT PortableGetMonitorInfo(HMONITOR hMonitor, MONITORINFO *pmi);
+HRESULT PortableGetCursorInfo(CURSORINFO *pci);
 
 #if NTDDI_VERSION < 0x0600
 enum _ASSOC_FILTER
