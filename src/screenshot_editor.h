@@ -314,6 +314,7 @@ class CScreenshotEditorRendererGDI
     CRenderObject *_pRenderObjSel;
     RECT _rcSelection;
     RECT _rcSelectionVisual;
+    RECT _rcSelectionOld;
     RECT _rcCursor;
     CDynamicArray<CRenderObject> _vRenderObjs;
     int _cMipmaps;
@@ -330,15 +331,11 @@ class CScreenshotEditorRendererGDI
         bool fCopiedScreenshot : 1;
         bool fSelectionBorderAnimDirty : 1;
         bool fSelectionDirty : 1;
-        bool fSelectionDirtyNorth : 1;
-        bool fSelectionDirtyEast : 1;
-        bool fSelectionDirtySouth : 1;
-        bool fSelectionDirtyWest : 1;
         bool fEntireFrameDirty : 1;
         bool fCursorVisible : 1;
-        bool fRender : 1;
     } _bmp;
 
+    HRESULT _PaintObjects(HDC hdc, RECT *prcPaint);
     HRESULT _PaintSelectionRectangle(HDC hdc, RECT *prc, bool fUseMarquee);
     HRESULT _PaintSizingHelpers(HDC hdc, RECT *prc);
     HRESULT _PaintRenderObjectVisualBuffer(
@@ -357,6 +354,44 @@ class CScreenshotEditorRendererGDI
     HBITMAP _MakeHideCursorBuffer(HBITMAP hbm);
     HRESULT _MakeCursorBuffers();
     HRESULT _ShowHideCursor(bool fVisible);
+
+    inline RECT *_GetSelectionTarget()
+    {
+        return _pRenderObjSel
+            ? &_pRenderObjSel->_rcLatestLog
+            : &_rcSelection;
+    }
+
+    bool _DidSelectionGrow()
+    {
+        bool fHorz = false;
+        bool fVert = false;
+
+        if (_rcSelectionOld.left < _rcSelection.left && _rcSelectionOld.right == _rcSelection.right)
+        {
+            fHorz = true;
+        }
+        else if (_rcSelectionOld.right > _rcSelection.right && _rcSelectionOld.left == _rcSelection.left)
+        {
+            fHorz = true;
+        }
+
+        if (_rcSelectionOld.top < _rcSelection.top && _rcSelectionOld.bottom == _rcSelection.bottom)
+        {
+            fVert = true;
+        }
+        else if (_rcSelectionOld.bottom > _rcSelection.bottom && _rcSelectionOld.top == _rcSelection.top)
+        {
+            fVert = true;
+        }
+
+        return fHorz || fVert;
+    }
+
+    inline bool _DidSelectionShrink()
+    {
+        return !_DidSelectionGrow();
+    }
 
 public:
     static constexpr int c_iDimAmount = 0xFF * 0.75;
@@ -382,13 +417,16 @@ public:
     {
         ZeroMemory(&_rcSelection, sizeof(_rcSelection));
         ZeroMemory(&_rcSelectionVisual, sizeof(_rcSelectionVisual));
+        ZeroMemory(&_rcSelectionOld, sizeof(_rcSelectionOld));
         ZeroMemory(&_bmp, sizeof(_bmp));
+        _bmp.fEntireFrameDirty = true;
     }
 
     ~CScreenshotEditorRendererGDI();
 
     HRESULT Initialize();
     HRESULT Paint(HDC hdc, RECT *prcPaint = nullptr);
+    HRESULT Render(HDC hdc, RECT *prcPaint = nullptr);
     HRESULT RenderToBitmap(OUT HBITMAP *phbmOut);
     HRESULT UpdateSelection(RECT *prcNew);
     HRESULT PreviewSelection(RECT *prcNew);

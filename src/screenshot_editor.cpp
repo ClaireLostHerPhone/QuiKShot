@@ -2131,11 +2131,16 @@ HRESULT CScreenshotEditorRendererGDI::Initialize()
 
 HRESULT CScreenshotEditorRendererGDI::Paint(HDC hdc, RECT *prcPaint)
 {
-    // There is currently no good condition to avoid using the backbuffer under.
-    bool fUseBackbuffer = !_bmp.fRender;
+    // We try to avoid using the backbuffer whenever possible.
+    bool fUseBackbuffer = false;
+
+    if (_bmp.fEntireFrameDirty)
+        fUseBackbuffer = true;
+    if (_bmp.fSelectionDirty)
+        fUseBackbuffer = true;
 
     HDC hdcScreenshot = CreateCompatibleDC(hdc);
-    HGDIOBJ hObjOldSS = (HGDIOBJ)SelectObject(hdcScreenshot, _bmp.fRender ? _hbmScreenshotLight : _hbmScreenshotDimmed);
+    HGDIOBJ hObjOldSS = (HGDIOBJ)SelectObject(hdcScreenshot, _hbmScreenshotDimmed);
 
     HDC hdcBackbuffer = nullptr;
     HBITMAP hbmBackbuffer = nullptr;
@@ -2160,26 +2165,14 @@ HRESULT CScreenshotEditorRendererGDI::Paint(HDC hdc, RECT *prcPaint)
     else
     {
         hdcBackbuffer = hdcScreenshot;
-
-        if (_bmp.fRender)
-        {
-            BitBlt(
-                hdc,
-                0, 0,
-                RECTWIDTH(*prcPaint), RECTHEIGHT(*prcPaint),
-                hdcScreenshot,
-                prcPaint->left, prcPaint->top,
-                SRCCOPY
-            );
-        }
     }
 
-    if (!_bmp.fRender && _bmp.fHasAnySelectionMade)
-    {
-        HDC hdcSelection = fUseBackbuffer
-            ? hdcBackbuffer
-            : hdc;
+    HDC hdcSelection = fUseBackbuffer
+        ? hdcBackbuffer
+        : hdc;
 
+    if (_bmp.fHasAnySelectionMade)
+    {
         // Highlight the selected area of the screenshot:
         HGDIOBJ hOldBmp = SelectObject(hdcScreenshot, _hbmScreenshotLight);
         BitBlt(
@@ -2203,40 +2196,14 @@ HRESULT CScreenshotEditorRendererGDI::Paint(HDC hdc, RECT *prcPaint)
     }
 
     // Paint objects:
+    if (fUseBackbuffer || _bmp.fAnyObjectDirty)
     {
-        HDC hdcSelection = fUseBackbuffer
-            ? hdcBackbuffer
-            : hdc;
-
-        // Paint all objects from back to front.
-        for (int i = 0, j = _vRenderObjs.GetSize(); i < j; i++)
-        {
-            CRenderObject *pRenderObject = &_vRenderObjs[i];
-
-            RECT rcVisual;
-            if (SUCCEEDED(GetAdjustedObjectVisualRect(pRenderObject->_pObj, &rcVisual)))
-            {
-                RECT rcTemp;
-                if (!IntersectRect(&rcTemp, &rcVisual, prcPaint))
-                {
-                    // Skip over objects that can't be reasonably drawn anyway.
-                    continue;
-                }
-
-                ASSERT_KEEP(SUCCEEDED(_PaintRenderObjectVisualBuffer(hdcSelection, prcPaint, pRenderObject)));
-            }
-        }
+        _PaintObjects(hdcSelection, prcPaint);
     }
     
-    if (!_bmp.fRender && (_bmp.fHasAnySelectionMade || _bmp.fPreviewSelection))
+    if (_bmp.fHasAnySelectionMade || _bmp.fPreviewSelection)
     {
-        HDC hdcSelection = fUseBackbuffer
-            ? hdcBackbuffer
-            : hdc;
-
-        RECT *prcTarget = _pRenderObjSel
-            ? &_pRenderObjSel->_rcLatestLog
-            : &_rcSelection;
+        RECT *prcTarget = _GetSelectionTarget();
 
         _PaintSelectionRectangle(hdcSelection, prcTarget, _bmp.fHasAnySelectionMade && _bmp.fDrawMarqueeSelection);
         if (_bmp.fDrawSelectionSizeHelpers)
@@ -2245,6 +2212,7 @@ HRESULT CScreenshotEditorRendererGDI::Paint(HDC hdc, RECT *prcPaint)
         }
     }
 
+    // Paint the backbuffer if we're using it:
     if (fUseBackbuffer)
     {
         BitBlt(
@@ -2270,11 +2238,31 @@ HRESULT CScreenshotEditorRendererGDI::Paint(HDC hdc, RECT *prcPaint)
 
     // Clear all applicable dirty flags:
     _bmp.fSelectionDirty = false;
-    _bmp.fSelectionDirtyNorth = false;
-    _bmp.fSelectionDirtySouth = false;
-    _bmp.fSelectionDirtyEast = false;
-    _bmp.fSelectionDirtyWest = false;
     _bmp.fAnyObjectDirty = false;
+    _bmp.fEntireFrameDirty = false;
+
+    return S_OK;
+}
+
+HRESULT CScreenshotEditorRendererGDI::Render(HDC hdc, RECT *prcPaint)
+{
+    HDC hdcScreenshot = CreateCompatibleDC(hdc);
+    HGDIOBJ hObjOldSS = (HGDIOBJ)SelectObject(hdcScreenshot, _hbmScreenshotLight);
+
+    BitBlt(
+        hdc,
+        0, 0,
+        RECTWIDTH(*prcPaint), RECTHEIGHT(*prcPaint),
+        hdcScreenshot,
+        prcPaint->left, prcPaint->top,
+        SRCCOPY
+    );
+
+    // Paint objects:
+    _PaintObjects(hdc, prcPaint);
+
+    SelectObject(hdcScreenshot, hObjOldSS);
+    DeleteDC(hdcScreenshot);
 
     return S_OK;
 }
@@ -2284,7 +2272,6 @@ HRESULT CScreenshotEditorRendererGDI::Paint(HDC hdc, RECT *prcPaint)
  */
 HRESULT CScreenshotEditorRendererGDI::RenderToBitmap(OUT HBITMAP *phbmOut)
 {
-    _bmp.fRender = true;
     HDC hdcDesktop = GetDC(HWND_DESKTOP);
     HDC hdc = CreateCompatibleDC(hdcDesktop);
 
@@ -2294,13 +2281,12 @@ HRESULT CScreenshotEditorRendererGDI::RenderToBitmap(OUT HBITMAP *phbmOut)
     RECT rcPaint = { 0 };
     rcPaint.right = _pScreenshotCtx->_sizeDesktop.cx;
     rcPaint.bottom = _pScreenshotCtx->_sizeDesktop.cy;
-    Paint(hdc, &rcPaint);
+    Render(hdc, &rcPaint);
 
     SelectObject(hdc, hBmpOld);
 
     DeleteDC(hdc);
     ReleaseDC(HWND_DESKTOP, hdcDesktop);
-    _bmp.fRender = false;
     return S_OK;
 }
 
@@ -2319,23 +2305,6 @@ HRESULT CScreenshotEditorRendererGDI::UpdateSelection(RECT *prcNew)
         || RECTHEIGHT(_rcSelection) != RECTHEIGHT(rcSelectionOld))
     {
         _bmp.fSelectionDirty = true;
-    }
-
-    if (_rcSelection.left != rcSelectionOld.left)
-    {
-        _bmp.fSelectionDirtyWest = true;
-    }
-    if (_rcSelection.top != rcSelectionOld.top)
-    {
-        _bmp.fSelectionDirtyNorth = true;
-    }
-    if (_rcSelection.right != rcSelectionOld.right)
-    {
-        _bmp.fSelectionDirtyEast = true;
-    }
-    if (_rcSelection.bottom != rcSelectionOld.bottom)
-    {
-        _bmp.fSelectionDirtySouth = true;
     }
     
     RECT rcUnion;
@@ -2375,23 +2344,6 @@ HRESULT CScreenshotEditorRendererGDI::PreviewSelection(RECT *prcNew)
         || RECTHEIGHT(_rcSelectionVisual) != RECTHEIGHT(rcSelectionOld))
     {
         _bmp.fSelectionDirty = true;
-    }
-
-    if (_rcSelectionVisual.left != rcSelectionOld.left)
-    {
-        _bmp.fSelectionDirtyWest = true;
-    }
-    if (_rcSelectionVisual.top != rcSelectionOld.top)
-    {
-        _bmp.fSelectionDirtyNorth = true;
-    }
-    if (_rcSelectionVisual.right != rcSelectionOld.right)
-    {
-        _bmp.fSelectionDirtyEast = true;
-    }
-    if (_rcSelectionVisual.bottom != rcSelectionOld.bottom)
-    {
-        _bmp.fSelectionDirtySouth = true;
     }
 
     _rcSelection = _rcSelectionVisual;
@@ -2554,6 +2506,8 @@ HRESULT CScreenshotEditorRendererGDI::ChangeSelectedObject(IScreenshotEditorObje
     }
     else
     {
+        _bmp.fAnyObjectDirty = true;
+        _bmp.fSelectionDirty = true;
         InvalidateRect(_hwndRenderTarget, &_rcSelectionVisual, FALSE);
     }
 
@@ -2568,6 +2522,30 @@ HRESULT CScreenshotEditorRendererGDI::ChangeSelectedObject(IScreenshotEditorObje
     else
     {
         _pRenderObjSel = nullptr;
+    }
+
+    return S_OK;
+}
+
+HRESULT CScreenshotEditorRendererGDI::_PaintObjects(HDC hdc, RECT *prcPaint)
+{
+    // Paint all objects from back to front.
+    for (int i = 0, j = _vRenderObjs.GetSize(); i < j; i++)
+    {
+        CRenderObject *pRenderObject = &_vRenderObjs[i];
+
+        RECT rcVisual;
+        if (SUCCEEDED(GetAdjustedObjectVisualRect(pRenderObject->_pObj, &rcVisual)))
+        {
+            RECT rcTemp;
+            if (!IntersectRect(&rcTemp, &rcVisual, prcPaint))
+            {
+                // Skip over objects that can't be reasonably drawn anyway.
+                continue;
+            }
+
+            LOG_IF_FAILED(_PaintRenderObjectVisualBuffer(hdc, prcPaint, pRenderObject));
+        }
     }
 
     return S_OK;
@@ -2726,7 +2704,7 @@ void CScreenshotEditorRendererGDI::_UpdateMarquee()
     if (_iSelMarqueeFrame >= 6)
         _iSelMarqueeFrame = 0;
     _bmp.fSelectionBorderAnimDirty = true;
-    InvalidateRect(_hwndRenderTarget, _pRenderObjSel ? &_pRenderObjSel->_rcLatestLog : &_rcSelectionVisual, FALSE);
+    InvalidateRect(_hwndRenderTarget, _GetSelectionTarget(), FALSE);
 }
 
 HRESULT CScreenshotEditorRendererGDI::_StartSelectionMarqueeTimer()
@@ -3158,6 +3136,7 @@ HRESULT CScreenshotEditorRendererGDI::_ShowHideCursor(bool fVisible)
     }
 
     _bmp.fCursorVisible = fVisible;
+    _bmp.fEntireFrameDirty = true;
     InvalidateRect(_hwndRenderTarget, &_rcCursor, FALSE);
     return S_OK;
 }
