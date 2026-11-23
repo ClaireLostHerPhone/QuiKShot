@@ -2132,11 +2132,14 @@ HRESULT CScreenshotEditorRendererGDI::Initialize()
 HRESULT CScreenshotEditorRendererGDI::Paint(HDC hdc, RECT *prcPaint)
 {
     // We try to avoid using the backbuffer whenever possible.
+    // TODO: This is a nightmare to account for all the edge cases, so just reconsider using the backbuffer always.
     bool fUseBackbuffer = false;
 
     if (_bmp.fEntireFrameDirty)
         fUseBackbuffer = true;
     if (_bmp.fSelectionDirty)
+        fUseBackbuffer = true;
+    if (_bmp.fAnyObjectDirty)
         fUseBackbuffer = true;
 
     HDC hdcScreenshot = CreateCompatibleDC(hdc);
@@ -2196,10 +2199,7 @@ HRESULT CScreenshotEditorRendererGDI::Paint(HDC hdc, RECT *prcPaint)
     }
 
     // Paint objects:
-    if (fUseBackbuffer || _bmp.fAnyObjectDirty)
-    {
-        _PaintObjects(hdcSelection, prcPaint);
-    }
+    _PaintObjects(hdcSelection, prcPaint);
     
     if (_bmp.fHasAnySelectionMade || _bmp.fPreviewSelection)
     {

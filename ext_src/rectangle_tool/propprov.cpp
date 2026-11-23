@@ -6,6 +6,9 @@ HRESULT CPropertyProvider::_InitializeProperties()
     if (_fPropsInitialized)
         return S_OK;
 
+    if (!_pUnkSite)
+        return E_FAIL;
+
     HRESULT hr = E_PENDING;
 
     IObjectWithSite *pows = nullptr;
@@ -44,7 +47,6 @@ STDMETHODIMP CPropertyProvider::GetSite(REFIID riid, void **ppvSite)
 
 STDMETHODIMP CPropertyProvider::SetSite(IUnknown *pUnkSite)
 {
-    _pUnkSite = pUnkSite;
     HRESULT hr = E_FAIL;
 
     if (_pUnkSite)
@@ -53,6 +55,7 @@ STDMETHODIMP CPropertyProvider::SetSite(IUnknown *pUnkSite)
         _pUnkSite = nullptr;
     }
 
+    _pUnkSite = pUnkSite;
     hr = S_OK;
     return hr;
 }
@@ -62,7 +65,10 @@ STDMETHODIMP CPropertyProvider::GetEnumProperties(OUT IEnumUnknown **pEnumOut)
     if (!pEnumOut)
         return E_POINTER;
 
-    _InitializeProperties();
+    if (FAILED(_InitializeProperties()))
+    {
+        return E_FAIL;
+    }
 
     *pEnumOut = new CEnumProperties(this);
     if (!*pEnumOut)
