@@ -10,6 +10,7 @@
 #include "cfgmgr.h"
 #include <ShlGuid.h>
 #include <Shlwapi.h>
+#include "qs_gdi.h"
 
 #undef PathAppend // QS name conflicts with shlwapi.h
 
@@ -27,7 +28,7 @@ static HRESULT GetAdjustedObjectVisualRect(IScreenshotEditorObject *pObj, RECT *
     return E_FAIL;
 }
 
-static HBITMAP IconToBitmap(HICON hicon, int iBackgroundColor, bool fForComCtl)
+static CUniqueHBitmap IconToBitmap(HICON hicon, int iBackgroundColor, bool fForComCtl)
 {
     if (fForComCtl && GetCommonControlsVersion().dwMajorVersion >= 6)
     {
@@ -38,10 +39,10 @@ static HBITMAP IconToBitmap(HICON hicon, int iBackgroundColor, bool fForComCtl)
         int cxIcon = GetSystemMetrics(SM_CXSMICON);
         int cyIcon = GetSystemMetrics(SM_CYSMICON);
 
-        HDC hdcDesktop = GetDC(HWND_DESKTOP);
-        HDC hdc = CreateCompatibleDC(hdcDesktop);
-        HBITMAP hbm = CreateCompatibleBitmap(hdcDesktop, cxIcon, cyIcon);
-        HGDIOBJ hbmOld = SelectObject(hdc, hbm);
+        CUniqueHdcWindow hdcDesktop(HWND_DESKTOP);
+        CUniqueHdc hdc = CreateCompatibleDC(hdcDesktop.Get());
+        CUniqueHBitmap hbm = CreateCompatibleBitmap(hdcDesktop.Get(), cxIcon, cyIcon);
+        CSelectObject hbmOld(hdc.Get(), hbm.Get());
 
         HBRUSH hbr = GetSysColorBrush(iBackgroundColor);
 
@@ -49,24 +50,20 @@ static HBITMAP IconToBitmap(HICON hicon, int iBackgroundColor, bool fForComCtl)
         rcIcon.right = cxIcon;
         rcIcon.bottom = cyIcon;
 
-        FillRect(hdc, &rcIcon, hbr);
+        FillRect(hdc.Get(), &rcIcon, hbr);
 
-        DrawIconEx(hdc, 0, 0, hicon, cxIcon, cyIcon, 0, nullptr, DI_NORMAL);
-
-        SelectObject(hdc, hbmOld);
-        DeleteDC(hdc);
-        ReleaseDC(HWND_DESKTOP, hdcDesktop);
+        DrawIconEx(hdc.Get(), 0, 0, hicon, cxIcon, cyIcon, 0, nullptr, DI_NORMAL);
 
         return hbm;
     }
 }
 
-static HBITMAP ToolbarIconToBitmap(HICON hicon)
+static CUniqueHBitmap ToolbarIconToBitmap(HICON hicon)
 {
     return IconToBitmap(hicon, COLOR_BTNFACE, true);
 }
 
-static HBITMAP MenuIconToBitmap(HICON hicon)
+static CUniqueHBitmap MenuIconToBitmap(HICON hicon)
 {
     return IconToBitmap(hicon, COLOR_MENU, false);
 }
@@ -180,7 +177,7 @@ LRESULT CEditorToolbar::_OnCreate(CREATESTRUCT *pcs)
         int idxIconCursorShow = 0;
 
         {
-            HBITMAP hbm = ToolbarIconToBitmap(hiconSelect);
+            HBITMAP hbm = ToolbarIconToBitmap(hiconSelect).ReleaseAndGet();
             _vhbmIcons.Push(hbm);
             DestroyIcon(hiconSelect);
 
@@ -192,7 +189,7 @@ LRESULT CEditorToolbar::_OnCreate(CREATESTRUCT *pcs)
         }
 
         {
-            HBITMAP hbm = ToolbarIconToBitmap(hiconMove);
+            HBITMAP hbm = ToolbarIconToBitmap(hiconMove).ReleaseAndGet();
             _vhbmIcons.Push(hbm);
             DestroyIcon(hiconMove);
 
@@ -204,7 +201,7 @@ LRESULT CEditorToolbar::_OnCreate(CREATESTRUCT *pcs)
         }
 
         {
-            HBITMAP hbm = ToolbarIconToBitmap(hiconCursorShow);
+            HBITMAP hbm = ToolbarIconToBitmap(hiconCursorShow).ReleaseAndGet();
             _vhbmIcons.Push(hbm);
             DestroyIcon(hiconCursorShow);
 
@@ -249,7 +246,7 @@ LRESULT CEditorToolbar::_OnCreate(CREATESTRUCT *pcs)
                 int idxExtToolIcon = 0;
                 if (hiconExtTool)
                 {
-                    HBITMAP hbm = ToolbarIconToBitmap(hiconExtTool);
+                    HBITMAP hbm = ToolbarIconToBitmap(hiconExtTool).ReleaseAndGet();
                     _vhbmIcons.Push(hbm);
                     DestroyIcon(hiconExtTool);
 
@@ -367,42 +364,34 @@ HRESULT CEditorToolbar::_GenerateToolIcon(const TCHAR *pszToolName, OUT HBITMAP 
     int cxIcon = PortableGetSystemMetricsForDpi(SM_CXSMICON, _uDpi);
     int cyIcon = PortableGetSystemMetricsForDpi(SM_CYSMICON, _uDpi);
 
-    HDC hdcDesktop = GetDC(HWND_DESKTOP);
-    HDC hdc = CreateCompatibleDC(hdcDesktop);
-    HBITMAP hbm = CreateCompatibleBitmap(hdcDesktop, cxIcon, cyIcon);
+    CUniqueHdcWindow hdcDesktop(HWND_DESKTOP);
+    CUniqueHdc hdc = CreateCompatibleDC(hdcDesktop.Get());
+    CUniqueHBitmap hbm = CreateCompatibleBitmap(hdcDesktop.Get(), cxIcon, cyIcon);
 
-    HGDIOBJ hBmpOld = SelectObject(hdc, hbm);
-    HBRUSH hbr = (HBRUSH)GetStockObject(WHITE_BRUSH);
-    HGDIOBJ hBrushOld = SelectObject(hdc, hbr);
+    CSelectObject hBmpOld(hdc.Get(), hbm.Get());
+    CUniqueHBrush hbr = (HBRUSH)GetStockObject(WHITE_BRUSH);
+    CSelectObject hBrushOld(hdc.Get(), hbr.Get());
 
-    HPEN hpen = (HPEN)GetStockObject(BLACK_PEN);
-    HGDIOBJ hPenOld = SelectObject(hdc, hpen);
+    CUniqueHPen hpen = (HPEN)GetStockObject(BLACK_PEN);
+    CSelectObject hPenOld(hdc.Get(), hpen.Get());
 
-    Rectangle(hdc, 0, 0, cxIcon, cyIcon);
+    Rectangle(hdc.Get(), 0, 0, cxIcon, cyIcon);
 
     NONCLIENTMETRICS ncm = { 0 };
     ncm.cbSize = sizeof(ncm);
     SystemParametersInfo(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, FALSE);
     
     ncm.lfMessageFont.lfHeight = MulDiv(12, 96, _uDpi);
-    HFONT hFont = CreateFontIndirect(&ncm.lfMessageFont);
-    HGDIOBJ hFontOld = SelectObject(hdc, hFont);
+    CUniqueHFont hFont = CreateFontIndirect(&ncm.lfMessageFont);
+    CSelectObject hFontOld(hdc.Get(), hFont.Get());
 
     RECT rcText;
     rcText.left = rcText.top = 0;
     rcText.right = rcText.bottom = cyIcon;
     InflateRect(&rcText, -1, -1);
-    DrawText(hdc, pszToolName, 1, &rcText, DT_CENTER | DT_VCENTER);
+    DrawText(hdc.Get(), pszToolName, 1, &rcText, DT_CENTER | DT_VCENTER);
 
-    *phbmOut = hbm;
-
-    SelectObject(hdc, hPenOld);
-    SelectObject(hdc, hBrushOld);
-    SelectObject(hdc, hFontOld);
-    DeleteObject(hFont);
-    SelectObject(hdc, hBmpOld);
-    DeleteDC(hdc);
-    ReleaseDC(HWND_DESKTOP, hdcDesktop);
+    *phbmOut = hbm.ReleaseAndGet();
     return S_OK;
 }
 
@@ -598,12 +587,15 @@ LRESULT CEditorActionsStrip::_OnCreate(CREATESTRUCT *pcs)
     SendMessage(_hwndActions, TB_BUTTONSTRUCTSIZE, (WPARAM)sizeof(TBBUTTON), 0);
     SendMessage(_hwndActions, TB_SETEXTENDEDSTYLE, 0, TBSTYLE_EX_DOUBLEBUFFER | TBSTYLE_EX_DRAWDDARROWS);
 
-    _LoadIcons();
+    LOG_IF_FAILED(_LoadIcons());
     HRESULT hrExternEditor = _EnumOpenWithHandlers();
 
     TBBUTTON rgtbButTools[4] = { 0 };
     int i = 0;
     {
+        // We load standard icons for older operating systems (i.e. Windows 2000 and below)
+        // There's basically no overhead to them, so we keep them even in Windows XP and higher
+        // which use custom icons for all action strip buttons.
         TBADDBITMAP ab;
         ab.hInst = HINST_COMMCTRL;
         ab.nID = IDB_STD_SMALL_COLOR;
@@ -645,7 +637,7 @@ LRESULT CEditorActionsStrip::_OnCreate(CREATESTRUCT *pcs)
         }
 
         // Only show the "open in" button if we have external editors available.
-        if (SUCCEEDED(hrExternEditor))
+        if (SUCCEEDED(hrExternEditor) && _vExternEditors.GetSize() >= 1)
         {
             rgtbButTools[i].idCommand = IDM_EXTERNEDITFIRST;
             rgtbButTools[i].iString = (INT_PTR)TEXT("Open in...");
@@ -860,21 +852,21 @@ HRESULT CEditorActionsStrip::_LoadIcons()
         HICON hiconDiscard = (HICON)LoadImage(hmShell32, MAKEINTRESOURCE(240), IMAGE_ICON, cxIcon, cyIcon, 0);
         if (hiconDiscard)
         {
-            _hbmIconDiscard = ToolbarIconToBitmap(hiconDiscard);
+            _hbmIconDiscard = ToolbarIconToBitmap(hiconDiscard).ReleaseAndGet();
             DestroyIcon(hiconDiscard);
         }
 
         HICON hiconCopy = (HICON)LoadImage(hmShell32, MAKEINTRESOURCE(243), IMAGE_ICON, cxIcon, cyIcon, 0);
         if (hiconCopy)
         {
-            _hbmIconCopy = ToolbarIconToBitmap(hiconCopy);
+            _hbmIconCopy = ToolbarIconToBitmap(hiconCopy).ReleaseAndGet();
             DestroyIcon(hiconCopy);
         }
 
         HICON hiconSave = (HICON)LoadImage(hmShell32, MAKEINTRESOURCE(16761), IMAGE_ICON, cxIcon, cyIcon, 0);
         if (hiconSave)
         {
-            _hbmIconSave = ToolbarIconToBitmap(hiconSave);
+            _hbmIconSave = ToolbarIconToBitmap(hiconSave).ReleaseAndGet();
             DestroyIcon(hiconSave);
         }
         else
@@ -1469,7 +1461,7 @@ HRESULT CEditorActionsStrip::_EnumOpenWithHandlersForExtension(SHAssocEnumHandle
                 // of the icon for the toolbar. The menu will use a separate icon since its color differs.
                 // On Vista (maybe XP?) and higher, toolbars and menus both support alpha-blended icons, so the same
                 // bitmap can be used for both.
-                HBITMAP hbmIconRaw = ToolbarIconToBitmap(hicon);
+                HBITMAP hbmIconRaw = ToolbarIconToBitmap(hicon).ReleaseAndGet();
                 HBITMAP hbmPremult = nullptr;
 
                 if (GetCommonControlsVersion().dwMajorVersion >= 6)
@@ -1478,7 +1470,7 @@ HRESULT CEditorActionsStrip::_EnumOpenWithHandlersForExtension(SHAssocEnumHandle
                 }
                 else
                 {
-                    eed.hbmIconMenu = MenuIconToBitmap(hicon);
+                    eed.hbmIconMenu = MenuIconToBitmap(hicon).ReleaseAndGet();
                 }
 
                 if (hbmPremult)
@@ -2131,58 +2123,36 @@ HRESULT CScreenshotEditorRendererGDI::Initialize()
 
 HRESULT CScreenshotEditorRendererGDI::Paint(HDC hdc, RECT *prcPaint)
 {
-    // We try to avoid using the backbuffer whenever possible.
-    // TODO: This is a nightmare to account for all the edge cases, so just reconsider using the backbuffer always.
-    bool fUseBackbuffer = false;
+    CUniqueHdc hdcBackbuffer = CreateCompatibleDC(hdc);;
+    CUniqueHBitmap hbmBackbuffer = CreateCompatibleBitmap(hdc, RECTWIDTH(*prcPaint), RECTHEIGHT(*prcPaint));;
+    CSelectObject hObjOldBB(hdcBackbuffer.Get(), hbmBackbuffer.Get());
 
-    if (_bmp.fEntireFrameDirty)
-        fUseBackbuffer = true;
-    if (_bmp.fSelectionDirty)
-        fUseBackbuffer = true;
-    if (_bmp.fAnyObjectDirty)
-        fUseBackbuffer = true;
-
-    HDC hdcScreenshot = CreateCompatibleDC(hdc);
-    HGDIOBJ hObjOldSS = (HGDIOBJ)SelectObject(hdcScreenshot, _hbmScreenshotDimmed);
-
-    HDC hdcBackbuffer = nullptr;
-    HBITMAP hbmBackbuffer = nullptr;
-    HGDIOBJ hObjOldBB = nullptr;
-    if (fUseBackbuffer)
+    CUniqueHdc hdcScreenshot = CreateCompatibleDC(hdc);
     {
-        hdcBackbuffer = CreateCompatibleDC(hdc);
-        hbmBackbuffer = CreateCompatibleBitmap(hdc, RECTWIDTH(*prcPaint), RECTHEIGHT(*prcPaint));
-        hObjOldBB = (HGDIOBJ)SelectObject(hdcBackbuffer, hbmBackbuffer);
-
+        CSelectObject hObjOldSS(hdcScreenshot.Get(), _hbmScreenshotDimmed);
         BitBlt(
-            hdcBackbuffer,
+            hdcBackbuffer.Get(),
             0, 0,
             RECTWIDTH(*prcPaint), RECTHEIGHT(*prcPaint),
-            hdcScreenshot,
+            hdcScreenshot.Get(),
             prcPaint->left, prcPaint->top,
             SRCCOPY
         );
-        POINT ptOriginOld;
-        SetViewportOrgEx(hdcBackbuffer, -prcPaint->left, -prcPaint->top, &ptOriginOld);
     }
-    else
-    {
-        hdcBackbuffer = hdcScreenshot;
-    }
+    POINT ptOriginOld;
+    SetViewportOrgEx(hdcBackbuffer.Get(), -prcPaint->left, -prcPaint->top, &ptOriginOld);
 
-    HDC hdcSelection = fUseBackbuffer
-        ? hdcBackbuffer
-        : hdc;
+    HDC hdcSelection = hdcBackbuffer.Get();
 
     if (_bmp.fHasAnySelectionMade)
     {
         // Highlight the selected area of the screenshot:
-        HGDIOBJ hOldBmp = SelectObject(hdcScreenshot, _hbmScreenshotLight);
+        CSelectObject hOldBmp(hdcScreenshot.Get(), _hbmScreenshotLight);
         BitBlt(
             hdcSelection,
             _rcSelection.left, _rcSelection.top,
             RECTWIDTH(_rcSelection), RECTHEIGHT(_rcSelection),
-            hdcScreenshot,
+            hdcScreenshot.Get(),
             _rcSelection.left, _rcSelection.top,
             SRCCOPY
         );
@@ -2193,9 +2163,6 @@ HRESULT CScreenshotEditorRendererGDI::Paint(HDC hdc, RECT *prcPaint)
         {
             _PaintSelectionRectangle(hdcSelection, &_rcSelection, false);
         }
-
-        SelectObject(hdcScreenshot, hOldBmp);
-        SelectObject(hdcScreenshot, _hbmScreenshotDimmed);
     }
 
     // Paint objects:
@@ -2212,29 +2179,15 @@ HRESULT CScreenshotEditorRendererGDI::Paint(HDC hdc, RECT *prcPaint)
         }
     }
 
-    // Paint the backbuffer if we're using it:
-    if (fUseBackbuffer)
-    {
-        BitBlt(
-            hdc,
-            prcPaint->left, prcPaint->top,
-            RECTWIDTH(*prcPaint), RECTHEIGHT(*prcPaint),
-            hdcBackbuffer,
-            prcPaint->left, prcPaint->top,
-            SRCCOPY
-        );
-    }
-
-    SelectObject(hdcBackbuffer, hObjOldBB);
-
-    if (fUseBackbuffer)
-    {
-        DeleteObject(hbmBackbuffer);
-        DeleteDC(hdcBackbuffer);
-    }
-
-    SelectObject(hdcScreenshot, hObjOldSS);
-    DeleteDC(hdcScreenshot);
+    // Paint the backbuffer:
+    BitBlt(
+        hdc,
+        prcPaint->left, prcPaint->top,
+        RECTWIDTH(*prcPaint), RECTHEIGHT(*prcPaint),
+        hdcBackbuffer.Get(),
+        prcPaint->left, prcPaint->top,
+        SRCCOPY
+    );
 
     // Clear all applicable dirty flags:
     _bmp.fSelectionDirty = false;
@@ -2246,23 +2199,20 @@ HRESULT CScreenshotEditorRendererGDI::Paint(HDC hdc, RECT *prcPaint)
 
 HRESULT CScreenshotEditorRendererGDI::Render(HDC hdc, RECT *prcPaint)
 {
-    HDC hdcScreenshot = CreateCompatibleDC(hdc);
-    HGDIOBJ hObjOldSS = (HGDIOBJ)SelectObject(hdcScreenshot, _hbmScreenshotLight);
+    CUniqueHdc hdcScreenshot = CreateCompatibleDC(hdc);
+    CSelectObject hObjOldSS(hdcScreenshot.Get(), _hbmScreenshotLight);
 
     BitBlt(
         hdc,
         0, 0,
         RECTWIDTH(*prcPaint), RECTHEIGHT(*prcPaint),
-        hdcScreenshot,
+        hdcScreenshot.Get(),
         prcPaint->left, prcPaint->top,
         SRCCOPY
     );
 
     // Paint objects:
     _PaintObjects(hdc, prcPaint);
-
-    SelectObject(hdcScreenshot, hObjOldSS);
-    DeleteDC(hdcScreenshot);
 
     return S_OK;
 }
@@ -2272,21 +2222,17 @@ HRESULT CScreenshotEditorRendererGDI::Render(HDC hdc, RECT *prcPaint)
  */
 HRESULT CScreenshotEditorRendererGDI::RenderToBitmap(OUT HBITMAP *phbmOut)
 {
-    HDC hdcDesktop = GetDC(HWND_DESKTOP);
-    HDC hdc = CreateCompatibleDC(hdcDesktop);
+    CUniqueHdcWindow hdcDesktop(HWND_DESKTOP);
+    CUniqueHdc hdc = CreateCompatibleDC(hdcDesktop.Get());
 
-    *phbmOut = CreateCompatibleBitmap(hdcDesktop, _pScreenshotCtx->_sizeDesktop.cx, _pScreenshotCtx->_sizeDesktop.cy);
-    HGDIOBJ hBmpOld = SelectObject(hdc, *phbmOut);
+    *phbmOut = CreateCompatibleBitmap(hdcDesktop.Get(), _pScreenshotCtx->_sizeDesktop.cx, _pScreenshotCtx->_sizeDesktop.cy);
+    CSelectObject hBmpOld(hdc.Get(), *phbmOut);
 
     RECT rcPaint = { 0 };
     rcPaint.right = _pScreenshotCtx->_sizeDesktop.cx;
     rcPaint.bottom = _pScreenshotCtx->_sizeDesktop.cy;
-    Render(hdc, &rcPaint);
+    Render(hdc.Get(), &rcPaint);
 
-    SelectObject(hdc, hBmpOld);
-
-    DeleteDC(hdc);
-    ReleaseDC(HWND_DESKTOP, hdcDesktop);
     return S_OK;
 }
 
