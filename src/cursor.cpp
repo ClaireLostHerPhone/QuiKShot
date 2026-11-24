@@ -154,6 +154,8 @@ HRESULT CCursorRenderer::_DrawCursorShadow(HDC hdc, BITMAP *pbm)
         SelectObject(hdcShadow, hbmOld);
         DeleteDC(hdcShadow);
         ReleaseDC(HWND_DESKTOP, hdcDesktop);
+
+        DeleteObject(hbmMask32bpp);
     }
 
     return S_OK;
