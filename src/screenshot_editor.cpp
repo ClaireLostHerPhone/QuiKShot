@@ -3457,6 +3457,31 @@ LRESULT CScreenshotEditorWindow::_OnKeyDown(WPARAM virtualKey, LPARAM lParam)
             }
             break;
         }
+
+        case VK_UP:
+        {
+            LOG_IF_FAILED(_OnArrowKeyDown(0, -1));
+            break;
+        }
+
+        case VK_DOWN:
+        {
+            LOG_IF_FAILED(_OnArrowKeyDown(0, 1));
+            break;
+        }
+
+        case VK_LEFT:
+        {
+            LOG_IF_FAILED(_OnArrowKeyDown(-1, 0));
+            break;
+        }
+
+        case VK_RIGHT:
+        {
+
+            LOG_IF_FAILED(_OnArrowKeyDown(1, 0));
+            break;
+        }
     }
 
     return 0;
@@ -3637,6 +3662,7 @@ LRESULT CScreenshotEditorWindow::_OnMouseMove(int x, int y, WPARAM flags)
 LRESULT CScreenshotEditorWindow::_OnMouseLButtonDown(int x, int y, WPARAM flags)
 {
     SetCapture(_hwnd);
+    _fHasCapture = true;
     _fIsSelectingRegion = true;
 
     GetCursorPos(&_ptSelectionOrigin);
@@ -3679,6 +3705,7 @@ LRESULT CScreenshotEditorWindow::_OnMouseLButtonDown(int x, int y, WPARAM flags)
 LRESULT CScreenshotEditorWindow::_OnMouseLButtonUp(int x, int y, WPARAM flags)
 {
     ReleaseCapture();
+    _fHasCapture = false;
 
     // If the user clicks in a static location without drawing a new outline
     // with the drag tool selected, then we will clear what was previously
@@ -3800,6 +3827,26 @@ LRESULT CScreenshotEditorWindow::_OnMouseRButtonUp(int x, int y, WPARAM flags)
     }
 
     return 0;
+}
+
+HRESULT CScreenshotEditorWindow::_OnArrowKeyDown(int xTrans, int yTrans)
+{
+    if (_fHasCapture)
+    {
+        POINT ptCursor;
+        GetCursorPos(&ptCursor);
+
+        ptCursor.x += xTrans;
+        ptCursor.y += yTrans;
+        SetCursorPos(ptCursor.x, ptCursor.y);
+    }
+    else if (_tool == SSET_DRAG)
+    {
+        OffsetRect(&_rcSelection, xTrans, yTrans);
+        LOG_IF_FAILED(_pRenderer->UpdateSelection(&_rcSelection));
+    }
+
+    return S_OK;
 }
 
 // static
