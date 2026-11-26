@@ -503,6 +503,8 @@ public:
     inline int SetPosition(int iPos) { _iPos = iPos; }
     inline void Rewind() { _iPos--; if (_iPos < 0) _iPos = 0; }
     inline void Progress() { _iPos++; if (_iPos > _vData.GetSize() - 1) _iPos = _vData.GetSize() - 1;  }
+    inline bool CanRewind() { return _iPos != 0; }
+    inline bool CanProgress() { return _iPos != _vData.GetSize() - 1; }
 
     // I don't think this architecture with actually popping the entry will work. The position
     // should be pushed back, and future entries are destroyed if there is anything beyond the
@@ -707,6 +709,7 @@ private:
     bool _fEnumeratedWindows;
     bool _fIsSelectingRegion;
     bool _fHasAnySelectionMade;
+    bool _fHasCapture;
 
 protected:
     inline bool _IsExtensionTool()
@@ -723,6 +726,9 @@ protected:
     LRESULT _OnMouseLButtonUp(int x, int y, WPARAM flags);
     LRESULT _OnMouseRButtonDown(int x, int y, WPARAM flags);
     LRESULT _OnMouseRButtonUp(int x, int y, WPARAM flags);
+
+    HRESULT _OpenContextMenu();
+    HRESULT _OnArrowKeyDown(int xTrans, int yTrans);
 
     HRESULT _BeginGetWindowPositions();
     HRESULT _HandleGetWindowPositions();
@@ -757,7 +763,7 @@ protected:
     HRESULT _RemoveObject(IScreenshotEditorObject *pObj);
     IScreenshotEditorObject *_GetMousedOverObject();
     HRESULT _SelectObject(IScreenshotEditorObject *pObj);
-    HRESULT _BuildObjectMenu(HMENU hmenu, IScreenshotEditorObject *pObj);
+    HRESULT _BuildObjectMenu(HMENU hmenu, IScreenshotEditorObject *pObj, int *idxMenuItem);
     HRESULT _DoPreviewSelection(IScreenshotEditorObject *pObj);
     HRESULT _BuildSelectionTemplatesForMonitors();
 
@@ -779,6 +785,9 @@ public:
     enum Command
     {
         IDM_REMOVEOBJECT = 200,
+        IDM_DISMISSSELECTION,
+        IDM_UNDO,
+        IDM_REDO,
     };
 
     //@Begin IUnknown
@@ -833,6 +842,7 @@ public:
         , _fEnumeratedWindows(false)
         , _fIsSelectingRegion(false)
         , _fHasAnySelectionMade(false)
+        , _fHasCapture(false)
     {
         _pHistoryMgr = new CEditHistoryManager();
 
