@@ -90,6 +90,7 @@ public:
 
     HRESULT SelectOrdinalTool(int idx);
     HRESULT OnToolChanged(ScreenshotEditorTool toolNew);
+    HRESULT ToggleCursor();
 };
 
 //
@@ -708,12 +709,17 @@ private:
     RECT _rcDragSelectCur;
     RECT _rcDragBegin;
     ScreenshotEditorTool _tool;
+    ScreenshotEditorTool _toolPrev;
     IScreenshotEditorTool *_pExtTool; // The current extension tool, if any.
     int _iToolMode;
-    bool _fEnumeratedWindows;
-    bool _fIsSelectingRegion;
-    bool _fHasAnySelectionMade;
-    bool _fHasCapture;
+    bool _fEnumeratedWindows : 1;
+    bool _fIsSelectingRegion : 1;
+    bool _fHasAnySelectionMade : 1;
+    bool _fHasCapture : 1;
+    bool _fMoveByMouse : 1;
+    bool _fContextMenuOpen : 1;
+    bool _fExtensionToolsLoaded : 1;
+    bool _fDragStartedFromCtxMenu : 1;
 
 protected:
     inline bool _IsExtensionTool()
@@ -732,6 +738,7 @@ protected:
     LRESULT _OnMouseRButtonUp(int x, int y, WPARAM flags);
 
     HRESULT _OpenContextMenu();
+    HRESULT _BuildToolsMenu(HMENU hMenu, CLinkedLinear *pArena);
     HRESULT _OnArrowKeyDown(int xTrans, int yTrans);
 
     HRESULT _BeginGetWindowPositions();
@@ -745,7 +752,7 @@ protected:
 
     HRESULT _ApplyChangesToImage();
 
-    HRESULT _LoadExtensionTools();
+    HRESULT _EnsureExtensionTools();
 
     HRESULT _ApplyHistoryState(CEditHistoryManager::EditHistoryData *pehd, bool fUndo);
     HRESULT _Undo();
@@ -767,6 +774,8 @@ protected:
     HRESULT _RemoveObject(IScreenshotEditorObject *pObj);
     IScreenshotEditorObject *_GetMousedOverObject();
     HRESULT _SelectObject(IScreenshotEditorObject *pObj);
+    HRESULT _BeginDragObject(IScreenshotEditorObject *pObj);
+    HRESULT _EndDragObject();
     HRESULT _BuildObjectMenu(HMENU hmenu, IScreenshotEditorObject *pObj, int *idxMenuItem);
     HRESULT _DoPreviewSelection(IScreenshotEditorObject *pObj);
     HRESULT _BuildSelectionTemplatesForMonitors();
@@ -792,6 +801,16 @@ public:
         IDM_DISMISSSELECTION,
         IDM_UNDO,
         IDM_REDO,
+        IDM_OBJECT,
+        IDM_MOVEOBJECT,
+        IDM_TOOLS,
+        IDM_TOOLSWINDOW,
+        IDM_SHOWCURSOR,
+        IDM_COPYSCREENSHOT,
+        IDM_SAVESCREENSHOT,
+        IDM_DISCARDSCREENSHOT,
+
+        IDM_TOOLFIRST = 300,
     };
 
     //@Begin IUnknown
@@ -841,12 +860,17 @@ public:
         , _pSelectedObject(nullptr)
         , _pHoveredObj(nullptr)
         , _tool(SSET_SELECT)
+        , _toolPrev(SSET_SELECT)
         , _pExtTool(nullptr)
         , _iToolMode(0)
         , _fEnumeratedWindows(false)
         , _fIsSelectingRegion(false)
         , _fHasAnySelectionMade(false)
         , _fHasCapture(false)
+        , _fMoveByMouse(true)
+        , _fContextMenuOpen(false)
+        , _fExtensionToolsLoaded(false)
+        , _fDragStartedFromCtxMenu(false)
     {
         _pHistoryMgr = new CEditHistoryManager();
 
@@ -862,6 +886,7 @@ public:
     HRESULT SaveImageTemp(const TCHAR *pszTempPath);
     int GetExtensionToolCount();
     HRESULT GetExtensionToolInfo(int idx, OUT ExtensionToolInfo *pExtToolInfo);
+    HRESULT Discard();
 
     static HRESULT RegisterWindowClass();
 

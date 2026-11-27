@@ -486,6 +486,14 @@ HRESULT CEditorToolbar::OnToolChanged(ScreenshotEditorTool toolNew)
     return S_OK;
 }
 
+HRESULT CEditorToolbar::ToggleCursor()
+{
+    bool fIsChecked = SendMessage(_hwndToolbar, TB_ISBUTTONCHECKED, SSET_SHOWCURSOR, 0);
+    SendMessage(_hwndToolbar, TB_CHECKBUTTON, SSET_SHOWCURSOR, !fIsChecked);
+    SendMessage(_hwnd, WM_COMMAND, MAKEWPARAM(SSET_SHOWCURSOR, 0), 0);
+    return S_OK;
+}
+
 //
 // CEditorActionsStrip
 //
@@ -753,7 +761,10 @@ LRESULT CEditorActionsStrip::_OnCommand(WPARAM wParam, LPARAM lParam)
     {
         case IDM_DISCARD:
         {
-            DestroyWindow(hwndEditor);
+            if (S_OK == _pEditor->Discard())
+            {
+                return 0;
+            }
             break;
         }
 
@@ -3424,7 +3435,7 @@ LRESULT CScreenshotEditorWindow::_OnKeyDown(WPARAM virtualKey, LPARAM lParam)
         }
         else if (FAILED(hrExtensionTool))
         {
-            // What to do in this case?
+            LOG_IF_FAILED(hrExtensionTool);
         }
     }
 
@@ -3438,14 +3449,25 @@ LRESULT CScreenshotEditorWindow::_OnKeyDown(WPARAM virtualKey, LPARAM lParam)
             }
             else
             {
-                DestroyWindow(_hwnd);
+                Discard();
             }
             break;
         }
 
         case VK_RETURN:
         {
-            CopyToClipboardAndAccept();
+            if (_fDragStartedFromCtxMenu)
+            {
+                _EndDragObject();
+            }
+            else if (_pSelectedObject)
+            {
+                _SelectObject(nullptr);
+            }
+            else
+            {
+                CopyToClipboardAndAccept();
+            }
             break;
         }
 
@@ -3712,16 +3734,7 @@ LRESULT CScreenshotEditorWindow::_OnMouseLButtonDown(int x, int y, WPARAM flags)
         if (_iToolMode == DRAGM_DRAG)
         {
             IScreenshotEditorObject *pObjHovered = _GetMousedOverObject();
-            if (pObjHovered && !(pObjHovered->GetFlags() & SSEOF_NODRAG))
-            {
-                ASSERT_KEEP(SUCCEEDED(_SelectObject(pObjHovered)));
-                ASSERT_KEEP(SUCCEEDED(pObjHovered->GetLogicalRect(&_rcDragBegin)));
-            }
-            else
-            {
-                _SelectObject(nullptr);
-                _rcDragBegin = _rcSelection;
-            }
+            LOG_IF_FAILED(_BeginDragObject(pObjHovered));
         }
     }
     else if (_IsExtensionTool())
@@ -3771,10 +3784,7 @@ LRESULT CScreenshotEditorWindow::_OnMouseLButtonUp(int x, int y, WPARAM flags)
     }
     else if (_tool == SSET_DRAG && _pSelectedObject)
     {
-        RECT rcObjCur;
-        _pSelectedObject->GetLogicalRect(&rcObjCur);
-        if (!(_pSelectedObject->GetFlags() & SSEOF_NOMOVEHISTORY))
-            _pHistoryMgr->PushObjectMove(_pSelectedObject, &rcObjCur, &_rcDragBegin);
+        LOG_IF_FAILED(_EndDragObject());
     }
     else if (_IsExtensionTool())
     {
@@ -3814,7 +3824,7 @@ LRESULT CScreenshotEditorWindow::_OnMouseRButtonDown(int x, int y, WPARAM flags)
         }
     }
 
-    if (!fDisablePopupMenu)
+    if (!_fIsSelectingRegion && !fDisablePopupMenu)
     {
         LOG_IF_FAILED(_OpenContextMenu());
     }
@@ -3845,12 +3855,59 @@ HRESULT CScreenshotEditorWindow::_OpenContextMenu()
         return HRESULT_FROM_WIN32(GetLastError());
     }
 
+    // Used for storing dynamic strings.
+    CLinkedLinear menuArena(MAX_PATH * sizeof(TCHAR) * 10);
+
+    IScreenshotEditorObject *pObjHover = _GetMousedOverObject();
+    bool fIsSelectionTemplate = pObjHover && _tcscmp(pObjHover->GetClassName(), TEXT("quikshot.CScreenshotEditorSelectionObject")) == 0;
+    bool fWantsObjMenu = (!fIsSelectionTemplate || !_fHasAnySelectionMade);
+
+    if (pObjHover && !fIsSelectionTemplate)
+    {
+        MENUITEMINFO mii = { sizeof(mii) };
+        mii.fMask = MIIM_ID | MIIM_STRING | MIIM_SUBMENU;
+        mii.wID = IDM_OBJECT;
+        mii.dwTypeData = TEXT("&Object");
+        mii.cch = _tcslen(mii.dwTypeData);
+        mii.hSubMenu = CreateMenu();
+        LOG_IF_FAILED(_BuildObjectMenu(mii.hSubMenu, pObjHover, &idxMenuItem));
+        InsertMenuItem(hMenu, idxMenuItem++, FALSE, &mii);
+    }
+
+    {
+        MENUITEMINFO mii = { sizeof(mii) };
+        mii.fMask = MIIM_ID | MIIM_STRING | MIIM_SUBMENU;
+        mii.wID = IDM_TOOLS;
+        mii.dwTypeData = TEXT("&Tools");
+        mii.cch = _tcslen(mii.dwTypeData);
+        mii.hSubMenu = CreateMenu();
+        LOG_IF_FAILED(_BuildToolsMenu(mii.hSubMenu, &menuArena));
+        InsertMenuItem(hMenu, idxMenuItem++, FALSE, &mii);
+    }
+
+    {
+        MENUITEMINFO mii = { sizeof(mii) };
+        mii.fMask = MIIM_ID | MIIM_STRING | MIIM_STATE;
+        mii.fState = IsCursorShown() ? MFS_CHECKED : MFS_UNCHECKED;
+        mii.wID = IDM_SHOWCURSOR;
+        mii.dwTypeData = TEXT("Show &cursor\t3");
+        mii.cch = _tcslen(mii.dwTypeData);
+        InsertMenuItem(hMenu, idxMenuItem++, FALSE, &mii);
+    }
+
+    {
+        MENUITEMINFO miiSep = { sizeof(miiSep) };
+        miiSep.fMask = MIIM_TYPE;
+        miiSep.fType = MFT_SEPARATOR;
+        InsertMenuItem(hMenu, idxMenuItem++, FALSE, &miiSep);
+    }
+
     {
         MENUITEMINFO mii = { sizeof(mii) };
         mii.fMask = MIIM_ID | MIIM_STRING | MIIM_STATE;
         mii.fState = _pHistoryMgr->CanRewind() ? MFS_ENABLED : MFS_DISABLED;
         mii.wID = IDM_UNDO;
-        mii.dwTypeData = TEXT("&Undo");
+        mii.dwTypeData = TEXT("&Undo\tCtrl+Z");
         mii.cch = _tcslen(mii.dwTypeData);
         InsertMenuItem(hMenu, idxMenuItem++, FALSE, &mii);
     }
@@ -3860,7 +3917,7 @@ HRESULT CScreenshotEditorWindow::_OpenContextMenu()
         mii.fMask = MIIM_ID | MIIM_STRING | MIIM_STATE;
         mii.fState = _pHistoryMgr->CanProgress() ? MFS_ENABLED : MFS_DISABLED;
         mii.wID = IDM_REDO;
-        mii.dwTypeData = TEXT("&Redo");
+        mii.dwTypeData = TEXT("&Redo\tCtrl+Y");
         mii.cch = _tcslen(mii.dwTypeData);
         InsertMenuItem(hMenu, idxMenuItem++, FALSE, &mii);
     }
@@ -3891,7 +3948,7 @@ HRESULT CScreenshotEditorWindow::_OpenContextMenu()
             MENUITEMINFO mii = { sizeof(mii) };
             mii.fMask = MIIM_ID | MIIM_STRING;
             mii.wID = IDM_DISMISSSELECTION;
-            mii.dwTypeData = TEXT("U&nselect region");
+            mii.dwTypeData = TEXT("Unselect &region\tEsc");
             mii.cch = _tcslen(mii.dwTypeData);
             InsertMenuItem(hMenu, idxMenuItem++, FALSE, &mii);
         }
@@ -3899,10 +3956,7 @@ HRESULT CScreenshotEditorWindow::_OpenContextMenu()
 
     HRESULT hr = S_OK;
 
-    IScreenshotEditorObject *pObjHover = _GetMousedOverObject();
-    bool fIsSelectionTemplate = _tcscmp(pObjHover->GetClassName(), TEXT("quikshot.CScreenshotEditorSelectionObject")) == 0;
-    bool fWantsMenu = (!fIsSelectionTemplate || !_fHasAnySelectionMade);
-    if (!_fIsSelectingRegion && pObjHover && fWantsMenu)
+    if (pObjHover && fIsSelectionTemplate && fWantsObjMenu)
     {
         if (idxMenuItem != 0)
         {
@@ -3912,7 +3966,52 @@ HRESULT CScreenshotEditorWindow::_OpenContextMenu()
             InsertMenuItem(hMenu, idxMenuItem++, FALSE, &miiSep);
         }
 
-        hr = _BuildObjectMenu(hMenu, pObjHover, &idxMenuItem);
+        MENUITEMINFO mii = { sizeof(mii) };
+        mii.fMask = MIIM_ID | MIIM_STRING | MIIM_DATA;
+        mii.wID = IDM_REMOVEOBJECT;
+        mii.dwTypeData = (TCHAR *)TEXT("Ignore &region");
+        mii.cch = _tcslen(mii.dwTypeData);
+        mii.dwItemData = (DWORD_PTR)pObjHover;
+        InsertMenuItem(hMenu, idxMenuItem++, FALSE, &mii);
+    }
+
+    {
+        if (idxMenuItem != 0)
+        {
+            MENUITEMINFO miiSep = { sizeof(miiSep) };
+            miiSep.fMask = MIIM_TYPE;
+            miiSep.fType = MFT_SEPARATOR;
+            InsertMenuItem(hMenu, idxMenuItem++, FALSE, &miiSep);
+        }
+
+        {
+            MENUITEMINFO mii = { sizeof(mii) };
+            mii.fMask = MIIM_ID | MIIM_STRING;
+            mii.wID = IDM_COPYSCREENSHOT;
+            mii.dwTypeData = TEXT("&Copy screenshot\tEnter");
+            mii.cch = _tcslen(mii.dwTypeData);
+            InsertMenuItem(hMenu, idxMenuItem++, FALSE, &mii);
+        }
+
+        {
+            MENUITEMINFO mii = { sizeof(mii) };
+            mii.fMask = MIIM_ID | MIIM_STRING;
+            mii.wID = IDM_SAVESCREENSHOT;
+            mii.dwTypeData = TEXT("&Save screenshot\tCtrl+S");
+            mii.cch = _tcslen(mii.dwTypeData);
+            InsertMenuItem(hMenu, idxMenuItem++, FALSE, &mii);
+        }
+
+        {
+            MENUITEMINFO mii = { sizeof(mii) };
+            mii.fMask = MIIM_ID | MIIM_STRING;
+            mii.wID = IDM_DISCARDSCREENSHOT;
+            mii.dwTypeData = _fHasAnySelectionMade
+                ? TEXT("&Discard screenshot")
+                : TEXT("&Discard screenshot\tEsc");
+            mii.cch = _tcslen(mii.dwTypeData);
+            InsertMenuItem(hMenu, idxMenuItem++, FALSE, &mii);
+        }
     }
 
     if (SUCCEEDED(hr))
@@ -3924,6 +4023,11 @@ HRESULT CScreenshotEditorWindow::_OpenContextMenu()
         if (pObjHover)
             _SelectObject(pObjHover);
 
+        // Since _UpdateCursor() is called whenever WM_SETCURSOR is sent, it immediately overrides
+        // any attempt to change the cursor via SetCursor. As such, we set this flag to disable that:
+        _fContextMenuOpen = true;
+        SetCursor(LoadCursor(nullptr, IDC_ARROW)); // Set the cursor to the Windows default.
+
         int iCmd = TrackPopupMenu(
             hMenu,
             TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RETURNCMD,
@@ -3932,6 +4036,9 @@ HRESULT CScreenshotEditorWindow::_OpenContextMenu()
             _hwnd,
             nullptr
         );
+
+        _fContextMenuOpen = false;
+        _UpdateCursor(); // Reset the cursor back to what it was.
 
         if (iCmd == IDM_UNDO)
         {
@@ -3949,6 +4056,85 @@ HRESULT CScreenshotEditorWindow::_OpenContextMenu()
         {
             _RemoveObject(pObjHover);
         }
+        else if (iCmd == IDM_MOVEOBJECT)
+        {
+            _SelectObject(pObjHover);
+
+            RECT rcCenter;
+            if (SUCCEEDED(pObjHover->GetLogicalRect(&rcCenter)))
+            {
+                SetCapture(_hwnd);
+                {
+                    _fHasCapture = true;
+                    MapWindowRect(_hwnd, HWND_DESKTOP, &rcCenter);
+
+                    int x = rcCenter.right - RECTWIDTH(rcCenter) / 2;
+                    int y = rcCenter.bottom - RECTHEIGHT(rcCenter) / 2;
+
+                    SetCursorPos(x, y);
+
+                    _fIsSelectingRegion = true;
+
+                    // Why not... (lazy)
+                    GetCursorPos(&_ptSelectionOrigin);
+                    ScreenToClient(_hwnd, &_ptSelectionOrigin);
+
+                    _rcDragSelectCur.left = _rcDragSelectCur.right = x;
+                    _rcDragSelectCur.top = _rcDragSelectCur.bottom = y;
+    
+                    _fDragStartedFromCtxMenu = true;
+                    _toolPrev = _tool;
+                    _ChangeTool(SSET_DRAG);
+                    _BeginDragObject(pObjHover);
+
+                    // Prevent this function from removing the selection.
+                    pObjHover = nullptr;
+                }
+            }
+        }
+        else if (iCmd == IDM_COPYSCREENSHOT)
+        {
+            SendMessage(_hwnd, WM_SSE_COPYTOCLIPBOARD, 0, 0);
+        }
+        else if (iCmd == IDM_SAVESCREENSHOT)
+        {
+            SendMessage(_hwnd, WM_SSE_SAVEIMAGE, 0, 0);
+        }
+        else if (iCmd == IDM_DISCARDSCREENSHOT)
+        {
+            if (S_OK == Discard())
+            {
+                return S_OK;
+            }
+        }
+        else if (iCmd == IDM_SHOWCURSOR)
+        {
+            // If the toolbar exists, then we want to go through it to make sure the UI stays synchronized.
+            // Otherwise, we'll handle it ourselves.
+            if (_pToolbar)
+            {
+                _pToolbar->ToggleCursor();
+            }
+            else
+            {
+                if (IsCursorShown())
+                {
+                    SendMessage(_hwnd, WM_SSE_HIDECURSOR, 0, 0);
+                }
+                else
+                {
+                    SendMessage(_hwnd, WM_SSE_SHOWCURSOR, 0, 0);
+                }
+            }
+        }
+        else if (iCmd == IDM_TOOLSWINDOW)
+        {
+            _ShowFloatingToolbar();
+        }
+        else if (iCmd >= IDM_TOOLFIRST)
+        {
+            _ChangeTool((ScreenshotEditorTool)(iCmd - IDM_TOOLFIRST));
+        }
 
         if (pObjHover)
             _SelectObject(pObjSelectOld);
@@ -3956,6 +4142,83 @@ HRESULT CScreenshotEditorWindow::_OpenContextMenu()
 
     DestroyMenu(hMenu);
     return hr;
+}
+
+HRESULT CScreenshotEditorWindow::_BuildToolsMenu(HMENU hMenu, CLinkedLinear *pArena)
+{
+    LOG_IF_FAILED(_EnsureExtensionTools());
+
+    int idxMenuItem = 0;
+
+    {
+        MENUITEMINFO mii = { sizeof(mii) };
+        mii.fMask = MIIM_ID | MIIM_STRING | MIIM_STATE;
+        mii.fState = _tool == SSET_SELECT ? MFS_CHECKED : MFS_UNCHECKED;
+        mii.wID = IDM_TOOLFIRST + SSET_SELECT;
+        mii.dwTypeData = TEXT("&Select\t1");
+        mii.cch = _tcslen(mii.dwTypeData);
+        InsertMenuItem(hMenu, idxMenuItem++, FALSE, &mii);
+    }
+
+    {
+        MENUITEMINFO mii = { sizeof(mii) };
+        mii.fMask = MIIM_ID | MIIM_STRING | MIIM_STATE;
+        mii.fState = _tool == SSET_DRAG ? MFS_CHECKED : MFS_UNCHECKED;
+        mii.wID = IDM_TOOLFIRST + SSET_DRAG;
+        mii.dwTypeData = TEXT("&Move\t2");
+        mii.cch = _tcslen(mii.dwTypeData);
+        InsertMenuItem(hMenu, idxMenuItem++, FALSE, &mii);
+    }
+
+    int iAccelerator = 4;
+    for (int j = 0; j < GetExtensionToolCount(); j++)
+    {
+        ExtensionToolInfo eti;
+        if (SUCCEEDED(GetExtensionToolInfo(j, &eti)))
+        {
+            MENUITEMINFO mii = { sizeof(mii) };
+            mii.fMask = MIIM_ID | MIIM_STRING | MIIM_STATE;
+            mii.fState = _tool == eti.idTool ? MFS_CHECKED : MFS_UNCHECKED;
+            mii.wID = IDM_TOOLFIRST + eti.idTool;
+
+            if (iAccelerator <= 9)
+            {
+                TCHAR *pszStr = (TCHAR *)pArena->Push(MAX_PATH * sizeof(TCHAR) + 2);
+                _stprintf_s(pszStr, MAX_PATH, TEXT("%s\t%d"), eti.pszToolName, iAccelerator++);
+                mii.dwTypeData = (LPTSTR)pszStr;
+            }
+            else
+            {
+                mii.dwTypeData = (LPTSTR)eti.pszToolName;
+            }
+
+            mii.cch = _tcslen(mii.dwTypeData);
+            InsertMenuItem(hMenu, idxMenuItem++, FALSE, &mii);
+        }
+        else
+        {
+            DBGPRINT(TEXT("Failed to get extension tool info."));
+        }
+    }
+
+    {
+        MENUITEMINFO miiSep = { sizeof(miiSep) };
+        miiSep.fMask = MIIM_TYPE;
+        miiSep.fType = MFT_SEPARATOR;
+        InsertMenuItem(hMenu, idxMenuItem++, FALSE, &miiSep);
+    }
+
+    {
+        MENUITEMINFO mii = { sizeof(mii) };
+        mii.fMask = MIIM_ID | MIIM_STRING | MIIM_STATE;
+        mii.fState = (!_fHasAnySelectionMade && !_pSelectedObject) ? MFS_DISABLED : MFS_ENABLED;
+        mii.wID = IDM_TOOLSWINDOW;
+        mii.dwTypeData = TEXT("Show &tools window\tT");
+        mii.cch = _tcslen(mii.dwTypeData);
+        InsertMenuItem(hMenu, idxMenuItem++, FALSE, &mii);
+    }
+
+    return S_OK;
 }
 
 HRESULT CScreenshotEditorWindow::_OnArrowKeyDown(int xTrans, int yTrans)
@@ -3971,8 +4234,25 @@ HRESULT CScreenshotEditorWindow::_OnArrowKeyDown(int xTrans, int yTrans)
     }
     else if (_tool == SSET_DRAG)
     {
-        OffsetRect(&_rcSelection, xTrans, yTrans);
-        LOG_IF_FAILED(_pRenderer->UpdateSelection(&_rcSelection));
+        if (_pSelectedObject)
+        {
+            RECT rcObjLog;
+            HRESULT hr = _pSelectedObject->GetLogicalRect(&rcObjLog);
+            if (FAILED(hr))
+            {
+                return hr;
+            }
+
+            OffsetRect(&rcObjLog, xTrans, yTrans);
+            LOG_IF_FAILED(_pSelectedObject->Move(&rcObjLog));
+            _ShowFloatingToolbar();
+        }
+        else
+        {
+            OffsetRect(&_rcSelection, xTrans, yTrans);
+            LOG_IF_FAILED(_pRenderer->UpdateSelection(&_rcSelection));
+            _ShowFloatingToolbar();
+        }
     }
 
     return S_OK;
@@ -4078,8 +4358,11 @@ HRESULT CScreenshotEditorWindow::_ApplyChangesToImage()
     }
 }
 
-HRESULT CScreenshotEditorWindow::_LoadExtensionTools()
+HRESULT CScreenshotEditorWindow::_EnsureExtensionTools()
 {
+    if (_fExtensionToolsLoaded)
+        return S_OK;
+
     SetQSAllocTarget(_hwnd);
 
     CExtensionIterator *pExtIterator = nullptr;
@@ -4147,6 +4430,7 @@ HRESULT CScreenshotEditorWindow::_LoadExtensionTools()
     }
 
     SetQSAllocTarget(nullptr);
+    _fExtensionToolsLoaded = true;
     return S_OK;
 }
 
@@ -4158,6 +4442,7 @@ HRESULT CScreenshotEditorWindow::_ApplyHistoryState(CEditHistoryManager::EditHis
     if (pehd->idAction == CEditHistoryManager::EHID_SELECTREGION)
     {
         SetSelectedRegion(&pehd->data.selection.rcRegionNew);
+        _ShowFloatingToolbar();
     }
     else if (pehd->idAction == CEditHistoryManager::EHID_OBJECTINSERT)
     {
@@ -4302,7 +4587,7 @@ HRESULT CScreenshotEditorWindow::_EnsureToolbar()
 {
     if (!_pToolbar)
     {
-        LOG_IF_FAILED(_LoadExtensionTools());
+        LOG_IF_FAILED(_EnsureExtensionTools());
         _pToolbar = CEditorToolbar::Create(this, 0, WS_CHILD, 0, 0, 0, 0, _hwnd);
         if (_pToolbar)
             _pToolbar->OnToolChanged(_tool);
@@ -4544,6 +4829,9 @@ void CScreenshotEditorWindow::_HideFloatingToolbar()
 
 void CScreenshotEditorWindow::_UpdateCursor()
 {
+    if (_fContextMenuOpen)
+        return;
+
     TCHAR *idc = IDC_ARROW;
 
     if (!_fEnumeratedWindows)
@@ -4711,10 +4999,7 @@ IScreenshotEditorObject *CScreenshotEditorWindow::_GetMousedOverObject()
 
 HRESULT CScreenshotEditorWindow::_SelectObject(IScreenshotEditorObject *pObj)
 {
-    RECT rcOld = { 0 };
-
-    if (_pSelectedObject)
-        _pSelectedObject->Release();
+    IScreenshotEditorObject *pSelectedObjPrev = _pSelectedObject;
 
     _pSelectedObject = pObj;
 
@@ -4722,21 +5007,78 @@ HRESULT CScreenshotEditorWindow::_SelectObject(IScreenshotEditorObject *pObj)
         _pSelectedObject->AddRef();
 
     RefreshPropertiesUI();
-    return _pRenderer->ChangeSelectedObject(pObj);
+    HRESULT hr = _pRenderer->ChangeSelectedObject(pObj);
+
+    if (pSelectedObjPrev)
+        pSelectedObjPrev->Release();
+
+    return hr;
+}
+
+HRESULT CScreenshotEditorWindow::_BeginDragObject(IScreenshotEditorObject *pObj)
+{
+    if (pObj && !(pObj->GetFlags() & SSEOF_NODRAG))
+    {
+        ASSERT_KEEP(SUCCEEDED(_SelectObject(pObj)));
+        ASSERT_KEEP(SUCCEEDED(pObj->GetLogicalRect(&_rcDragBegin)));
+    }
+    else
+    {
+        _SelectObject(nullptr);
+        _rcDragBegin = _rcSelection;
+    }
+
+    return S_OK;
+}
+
+HRESULT CScreenshotEditorWindow::_EndDragObject()
+{
+    ReleaseCapture();
+    _fHasCapture = false;
+    _fIsSelectingRegion = false;
+    _ptSelectionOrigin.x = _ptSelectionOrigin.y = 0;
+
+    if (!_pSelectedObject)
+    {
+        return E_FAIL;
+    }
+
+    RECT rcObjCur;
+    _pSelectedObject->GetLogicalRect(&rcObjCur);
+    if (!(_pSelectedObject->GetFlags() & SSEOF_NOMOVEHISTORY))
+        _pHistoryMgr->PushObjectMove(_pSelectedObject, &rcObjCur, &_rcDragBegin);
+
+    if (_fDragStartedFromCtxMenu)
+    {
+        _ChangeTool(_toolPrev);
+        _fDragStartedFromCtxMenu = false;
+    }
+
+    return S_OK;
 }
 
 HRESULT CScreenshotEditorWindow::_BuildObjectMenu(HMENU hmenu, IScreenshotEditorObject *pObj, int *pidxMenuItem)
 {
-    if (pObj)
+    if (!pObj)
     {
-        bool fIsSelectionTemplate = _tcscmp(pObj->GetClassName(), TEXT("quikshot.CScreenshotEditorSelectionObject")) == 0;
+        return E_POINTER;
+    }
 
+    {
+        MENUITEMINFO mii = { sizeof(mii) };
+        mii.fMask = MIIM_ID | MIIM_STRING | MIIM_DATA;
+        mii.wID = IDM_MOVEOBJECT;
+        mii.dwTypeData = (TCHAR *)TEXT("&Move object");
+        mii.cch = _tcslen(mii.dwTypeData);
+        mii.dwItemData = (DWORD_PTR)pObj;
+        InsertMenuItem(hmenu, *pidxMenuItem++, FALSE, &mii);
+    }
+
+    {
         MENUITEMINFO mii = { sizeof(mii) };
         mii.fMask = MIIM_ID | MIIM_STRING | MIIM_DATA;
         mii.wID = IDM_REMOVEOBJECT;
-        mii.dwTypeData = fIsSelectionTemplate
-            ? (TCHAR *)TEXT("&Ignore region")
-            : (TCHAR *)TEXT("&Remove object");
+        mii.dwTypeData = (TCHAR *)TEXT("&Delete object");
         mii.cch = _tcslen(mii.dwTypeData);
         mii.dwItemData = (DWORD_PTR)pObj;
         InsertMenuItem(hmenu, *pidxMenuItem++, FALSE, &mii);
@@ -4884,7 +5226,7 @@ STDMETHODIMP CScreenshotEditorWindow::InvalidateObject(IScreenshotEditorObject *
 {
     // Apart from invalidating the render object, what should this method do?
     _pRenderer->InvalidateRenderObject(pObj);
-    return E_NOTIMPL;
+    return S_OK;
 }
 
 STDMETHODIMP CScreenshotEditorWindow::GetScreenshotContext(OUT IScreenshotContext **ppContext)
@@ -5099,6 +5441,27 @@ HRESULT CScreenshotEditorWindow::GetExtensionToolInfo(int idx, OUT ExtensionTool
     }
 
     return E_BOUNDS;
+}
+
+HRESULT CScreenshotEditorWindow::Discard()
+{
+    if (_pHistoryMgr->CanRewind())
+    {
+        int id = MessageBox(
+            _hwnd,
+            TEXT("Are you sure you wish to discard this edited screenshot?"),
+            TEXT("QuiKShot"),
+            MB_YESNO | MB_ICONEXCLAMATION
+        );
+
+        if (id == IDNO)
+        {
+            return S_FALSE;
+        }
+    }
+
+    DestroyWindow(_hwnd);
+    return S_OK;
 }
 
 // static
