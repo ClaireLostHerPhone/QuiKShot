@@ -8,6 +8,7 @@ class CNotifyWindow : public CWindow<CNotifyWindow>
 
 private:
     HMENU _hmenu;
+    UINT _wmTaskbarCreated;
     bool _fIsMenuOpen;
 
 protected:
@@ -30,6 +31,7 @@ public:
 
     CNotifyWindow()
         : _hmenu(nullptr)
+        , _wmTaskbarCreated(0)
         , _fIsMenuOpen(false)
     {
     }

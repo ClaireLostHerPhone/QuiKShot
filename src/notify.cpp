@@ -11,6 +11,7 @@ LRESULT CNotifyWindow::v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
     {
         case WM_CREATE:
         {
+            _wmTaskbarCreated = RegisterWindowMessage(TEXT("TaskbarCreated"));
             _hmenu = CreatePopupMenu();
 
             int idxMenuItem = 0;
@@ -127,6 +128,15 @@ LRESULT CNotifyWindow::v_WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
         {
             _fIsMenuOpen = false;
             break;
+        }
+
+        default:
+        {
+            if (uMsg == _wmTaskbarCreated)
+            {
+                LOG_IF_FAILED(_CreateNotifyIcon());
+                break;
+            }
         }
     }
 
