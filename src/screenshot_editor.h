@@ -281,12 +281,14 @@ public:
     HBITMAP _hbmLayer;
     RECT _rcLatestLog;
     RECT _rcLatestVisual;
+    bool _fFree;
 
     CRenderObject()
         : _pObj(nullptr)
         , _pRenderer(nullptr)
         , _pRendererGdi(nullptr)
         , _hbmLayer(nullptr)
+        , _fFree(false)
     {
         ZeroMemory(&_rcLatestLog, sizeof(_rcLatestLog));
         ZeroMemory(&_rcLatestVisual, sizeof(_rcLatestVisual));
@@ -301,6 +303,7 @@ public:
 class CScreenshotEditorRendererGDI
 {
     CScreenshotContext *_pScreenshotCtx;
+    CLinkedLinear _arenaRenderObjs;
     HWND _hwndRenderTarget;
     HPEN _hpenSelect;
     HPEN _hpenSizingHelpers;
@@ -310,13 +313,13 @@ class CScreenshotEditorRendererGDI
     HBITMAP _hbmCursorNone;
     HBITMAP _hbmCursorDimmed;
     HBITMAP _hbmCursorDimmedNone;
-    HBITMAP *_hbmMipmaps;
+    HBITMAP *_phbmMipmaps;
     CRenderObject *_pRenderObjSel;
     RECT _rcSelection;
     RECT _rcSelectionVisual;
     RECT _rcSelectionOld;
     RECT _rcCursor;
-    CDynamicArray<CRenderObject> _vRenderObjs;
+    CDynamicArray<CRenderObject *> _vpRenderObjs;
     int _cMipmaps;
     int _iSelMarqueeFrame;
     float _iZoom;
@@ -400,6 +403,7 @@ public:
 
     CScreenshotEditorRendererGDI(CScreenshotContext *pCtx, HWND hwndRenderTarget)
         : _pScreenshotCtx(pCtx)
+        , _arenaRenderObjs(sizeof(CRenderObject) * 20)
         , _hwndRenderTarget(hwndRenderTarget)
         , _hpenSelect(nullptr)
         , _hpenSizingHelpers(nullptr)
@@ -409,7 +413,7 @@ public:
         , _hbmCursorNone(nullptr)
         , _hbmCursorDimmed(nullptr)
         , _hbmCursorDimmedNone(nullptr)
-        , _hbmMipmaps(nullptr)
+        , _phbmMipmaps(nullptr)
         , _pRenderObjSel(nullptr)
         , _cMipmaps(0)
         , _iSelMarqueeFrame(0)

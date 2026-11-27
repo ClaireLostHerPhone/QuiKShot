@@ -2366,24 +2366,47 @@ bool CScreenshotEditorRendererGDI::IsCursorShown()
 
 HRESULT CScreenshotEditorRendererGDI::CreateRenderObject(IScreenshotEditorObject *pObj)
 {
-    CRenderObject ro;
+    CRenderObject *pro = nullptr;
 
     if (pObj->GetFlags() & SSEOF_NORENDERER)
         return S_FALSE;
 
-    ro._pObj = pObj;
+    FOR_EACH_DYNARR(CRenderObject *proCheck, _vpRenderObjs)
+    {
+        if (proCheck->_fFree)
+        {
+            pro = proCheck;
+            break;
+        }
+    }
+
+    if (!pro)
+    {
+        pro = (CRenderObject *)_arenaRenderObjs.Push(sizeof(*pro));
+        ZeroMemory(pro, sizeof(*pro));
+    }
+
+    if (!pro->_fFree)
+    {
+        _vpRenderObjs.Push(pro);
+    }
+    else
+    {
+        pro->_fFree = false;
+    }
+
+    pro->_pObj = pObj;
     pObj->AddRef();
-    HRESULT hr = pObj->QueryInterface(IID_PPV_ARGS(&ro._pRenderer));
+    HRESULT hr = pObj->QueryInterface(IID_PPV_ARGS(&pro->_pRenderer));
     if (SUCCEEDED(hr))
     {
         IScreenshotEditorObjectRendererGDI *pGdiRenderer = nullptr;
         if (SUCCEEDED(pObj->QueryInterface(IID_PPV_ARGS(&pGdiRenderer))))
         {
-            ro._pRendererGdi = pGdiRenderer;
+            pro->_pRendererGdi = pGdiRenderer;
         }
 
-        _vRenderObjs.Push(ro);
-        return S_OK;
+        hr = S_OK;
     }
 
     _bmp.fAnyObjectDirty = true;
@@ -2402,15 +2425,26 @@ HRESULT CScreenshotEditorRendererGDI::RemoveRenderObject(IScreenshotEditorObject
         }
 
         if (pro->_pRendererGdi)
+        {
             pro->_pRendererGdi->Release();
+            pro->_pRendererGdi = nullptr;
+        }
         if (pro->_pRenderer)
+        {
             pro->_pRenderer->Release();
+            pro->_pRenderer = nullptr;
+        }
         if (pro->_pObj)
+        {
             pro->_pObj->Release();
+            pro->_pObj = nullptr;
+        }
 
-        _vRenderObjs.Remove(idxRenderObj);
+        pro->_fFree = true;
         _bmp.fAnyObjectDirty = true;
         InvalidateRect(_hwndRenderTarget, &pro->_rcLatestVisual, FALSE);
+
+        return S_OK;
     }
 
     return E_NOT_SET;
@@ -2476,9 +2510,11 @@ HRESULT CScreenshotEditorRendererGDI::ChangeSelectedObject(IScreenshotEditorObje
 HRESULT CScreenshotEditorRendererGDI::_PaintObjects(HDC hdc, RECT *prcPaint)
 {
     // Paint all objects from back to front.
-    for (int i = 0, j = _vRenderObjs.GetSize(); i < j; i++)
+    for (int i = 0, j = _vpRenderObjs.GetSize(); i < j; i++)
     {
-        CRenderObject *pRenderObject = &_vRenderObjs[i];
+        CRenderObject *pRenderObject = _vpRenderObjs[i];
+        if (pRenderObject->_fFree)
+            continue;
 
         RECT rcVisual;
         if (SUCCEEDED(GetAdjustedObjectVisualRect(pRenderObject->_pObj, &rcVisual)))
@@ -2984,11 +3020,11 @@ HRESULT CScreenshotEditorRendererGDI::_FindRenderObjectFromInterfaceObject(
     if (!pIfaceObj || !ppRenderObjOut)
         return E_POINTER;
 
-    for (int i = 0; i < _vRenderObjs.GetSize(); i++)
+    for (int i = 0; i < _vpRenderObjs.GetSize(); i++)
     {
-        if (_vRenderObjs[i]._pObj == pIfaceObj)
+        if ((*_vpRenderObjs[i])._pObj == pIfaceObj)
         {
-            *ppRenderObjOut = &_vRenderObjs[i];
+            *ppRenderObjOut = _vpRenderObjs[i];
             if (pIdxOut)
                 *pIdxOut = i;
             return S_OK;
